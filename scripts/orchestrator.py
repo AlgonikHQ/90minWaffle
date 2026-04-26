@@ -110,8 +110,7 @@ def step_video(limit=2):
         return 0
 
 
-async 
-def step_overlay():
+async def step_overlay():
     log.info("━━━ STEP 5b: Text Overlay ━━━")
     try:
         import sys
@@ -126,6 +125,15 @@ def step_overlay():
     except Exception as e:
         log.error(f"  Overlay failed: {e}")
         return 0
+
+def step_match_intel():
+    log.info("━━━ STEP 8: Match Intel (Odds) ━━━")
+    try:
+        mi = import_module("match_intel", "/root/90minwaffle/scripts/match_intel.py")
+        mi.run_match_intel()
+        log.info("  Match Intel done")
+    except Exception as e:
+        log.error(f"  Match Intel failed: {e}")
 
 def step_discord():
     log.info("━━━ STEP 7: Discord Posting ━━━")
@@ -191,10 +199,11 @@ async def run_cycle(script_limit=3, video_limit=5):
     shippable   += step_corroborate()
     scripted     = step_script(limit=script_limit)
     produced     = step_video(limit=video_limit)
-    step_overlay()
+    await step_overlay()
     queued       = await step_queue()
-    await step_discord()
+    step_discord()
     await step_youtube()
+    step_match_intel()
 
     elapsed = (datetime.now(timezone.utc) - start).seconds
     log.info(f"{'='*50}")
