@@ -1,6 +1,26 @@
+# Secrets
+.env
+client_secret.json
+youtube_token.json
+
+# Data
+data/
+logs/
+assets/fonts/
+
+# Python
 venv/
 __pycache__/
 *.pyc
-.env
-logs/
-*.log
+*.pyo
+
+# Media
+*.mp4
+*.mp3
+*.png
+data/broll/
+data/videos/
+data/broll/
+
+# DB
+*.db
