@@ -126,6 +126,17 @@ async def step_overlay():
         log.error(f"  Overlay failed: {e}")
         return 0
 
+async def step_telegram():
+    log.info("━━━ STEP 7b: Telegram Posting ━━━")
+    try:
+        tp = import_module("telegram_poster", "/root/90minwaffle/scripts/telegram_poster.py")
+        posted = await tp.process_news_queue(limit=3)
+        log.info(f"  Telegram posted: {posted}")
+        return posted
+    except Exception as e:
+        log.error(f"  Telegram posting failed: {e}")
+        return 0
+
 def step_match_intel():
     log.info("━━━ STEP 8: Match Intel (Odds) ━━━")
     try:
@@ -202,6 +213,7 @@ async def run_cycle(script_limit=3, video_limit=5):
     await step_overlay()
     queued       = await step_queue()
     step_discord()
+    await step_telegram()
     await step_youtube()
     step_match_intel()
 

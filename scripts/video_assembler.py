@@ -24,6 +24,18 @@ def format_script(s):
     for w in ["done deal","confirmed","official","breaking","here we go","signed","champions","relegated","sacked","appointed"]:
         s=s.replace(w,w.upper()).replace(w.title(),w.upper())
     return s
+def generate_gtts_voiceover(text, out):
+    try:
+        from gtts import gTTS
+        tts = gTTS(text=text, lang="en", tld="co.uk", slow=False)
+        mp3_out = out.replace(".mp3", "_gtts.mp3")
+        tts.save(mp3_out)
+        log.info(f"  gTTS voiceover saved: {mp3_out}")
+        return mp3_out
+    except Exception as e:
+        log.error(f"  gTTS failed: {e}")
+        return None
+
 def generate_voiceover(script,story_id):
     out=os.path.join(OUTPUT_DIR,f"voice_{story_id}.mp3")
     os.makedirs(OUTPUT_DIR,exist_ok=True)
@@ -35,6 +47,9 @@ def generate_voiceover(script,story_id):
     if r.status_code==200:
         with open(out,"wb") as f: f.write(r.content)
         log.info(f"  ElevenLabs voiceover saved: {out}"); return out
+    if r.status_code == 401 and "quota" in r.text.lower():
+        log.warning("  ElevenLabs quota exhausted — falling back to gTTS")
+        return generate_gtts_voiceover(format_script(script), out)
     log.error(f"  ElevenLabs error: {r.status_code} {r.text[:200]}"); return None
 def is_womens_story(title):
     t=title.lower()
