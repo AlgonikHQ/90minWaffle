@@ -136,7 +136,7 @@ async def process_queue():
         SELECT id, title, source, score, format,
                winning_hook, script, caption, video_path
         FROM stories
-        WHERE status = 'video_ready' AND video_path IS NOT NULL
+        WHERE status IN ('video_ready', 'scripted')
         ORDER BY score DESC
         LIMIT 5
     """)
@@ -184,7 +184,7 @@ if __name__ == "__main__":
     c.execute("""
         SELECT id, title, source, score, format,
                winning_hook, script, caption, video_path
-        FROM stories WHERE status = 'video_ready' AND video_path IS NOT NULL
+        FROM stories WHERE status IN ('video_ready', 'scripted')
         ORDER BY score DESC LIMIT 1
     """)
     r = c.fetchone()
