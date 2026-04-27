@@ -26,6 +26,22 @@ def format_script(s):
     return s
 def generate_gtts_voiceover(text, out):
     try:
+        import pyttsx3, tempfile, subprocess
+        engine = pyttsx3.init()
+        voices = engine.getProperty("voices")
+        male = next((v for v in voices if "en-gb-x-rp" in v.id or "en-gb" in v.id), voices[0])
+        engine.setProperty("voice", male.id)
+        engine.setProperty("rate", 165)
+        tmp = out.replace(".mp3", "_tts.wav")
+        engine.save_to_file(text, tmp)
+        engine.runAndWait()
+        subprocess.run(["ffmpeg", "-y", "-i", tmp, out], capture_output=True)
+        import os; os.remove(tmp)
+        log.info(f"  pyttsx3 male voice saved: {out}")
+        return out
+    except Exception as e:
+        log.warning(f"  pyttsx3 failed ({e}) — using gTTS")
+    try:
         from gtts import gTTS
         tts = gTTS(text=text, lang="en", tld="co.uk", slow=False)
         mp3_out = out.replace(".mp3", "_gtts.mp3")
@@ -48,7 +64,7 @@ def generate_voiceover(script,story_id):
         with open(out,"wb") as f: f.write(r.content)
         log.info(f"  ElevenLabs voiceover saved: {out}"); return out
     if r.status_code == 401 and "quota" in r.text.lower():
-        log.warning("  ElevenLabs quota exhausted — skipping video until quota resets"); return None
+        log.warning("  ElevenLabs quota exhausted — falling back to pyttsx3 male voice"); return generate_gtts_voiceover(format_script(script), out)
     log.error(f"  ElevenLabs error: {r.status_code} {r.text[:200]}"); return None
 def is_womens_story(title):
     t=title.lower()

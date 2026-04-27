@@ -186,7 +186,7 @@ def apply_overlay(vp,ap,out,hook,cta):
 
 def process_videos(limit=2):
     conn=get_db(); c=conn.cursor()
-    c.execute("SELECT id,title,winning_hook,caption,video_path FROM stories WHERE status IN ('scripted','queued') AND video_path IS NOT NULL ORDER BY score DESC LIMIT ?",(limit,))
+    c.execute("SELECT id,title,winning_hook,caption,video_path FROM stories WHERE status IN ('video_ready','queued') AND video_path IS NOT NULL ORDER BY score DESC LIMIT ?",(limit,))
     rows=c.fetchall(); conn.close()
     if not rows: log.info("No videos"); return 0
     log.info(f"=== Word-sync overlay {len(rows)} videos ===")
@@ -197,6 +197,7 @@ def process_videos(limit=2):
         base_vp=vp.replace("_overlay","").replace("_wordsync","")
         if not os.path.exists(base_vp): base_vp=vp
         ap=base_vp.replace("video_","voice_").replace(".mp4",".mp3")
+        if not os.path.exists(ap): ap=ap.replace(".mp3","_gtts.mp3")
         if not os.path.exists(ap): log.warning(f"  No audio: {ap}"); continue
         hook=re.sub(r"[^a-zA-Z0-9 !?,.\-]","",fix_names((hook or title).upper()))
         cta=extract_cta(caption or "")

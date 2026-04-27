@@ -171,13 +171,13 @@ def detect_format(story, score):
         return "F4"
     if contains_any(t, TITLE_RACE_KEYWORDS):
         return "F5"
-    if score >= 65:
+    if score >= 75:
         return "F7"
     return "F2"
 
 def confidence_colour(score):
     if score >= 75: return "green"
-    if score >= 65: return "yellow"
+    if score >= 75: return "yellow"
     return "red"
 
 def calc_expiry(fmt):
@@ -210,7 +210,7 @@ def score_unscored_stories():
         if breakdown.get("disqualified"):
             status = "skipped"
             noise_count += 1
-        elif score >= 65:
+        elif score >= 75:
             status = "shippable"
             ship_count += 1
         elif score >= 45:
