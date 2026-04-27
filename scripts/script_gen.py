@@ -83,20 +83,10 @@ SOURCE: {story['source']} (Tier {story['source_tier']})
 FORMAT: {fmt} — {format_name}
 TARGET LENGTH: ~{length} seconds of spoken word (~{length * 2} words)
 SCORE: {story['score']}/100
+Generate 3 hook variants. Pick the highest scoring one as winning_hook.
+Scripts must end with: state the answer -> binary question CTA.
+IMPORTANT: Your entire response must be a single valid JSON object. No markdown, no explanation, no preamble. Start your response with {{ and end with }}."""
 
-{contrarian_instruction}
-
-Hook scoring criteria:
-- Specific number or name in first 5 words: +20
-- Pattern interrupt (contradicts expected framing): +15
-- Creates open loop (must watch to find out): +15
-- Under 8 words: +10
-- Zero AI-tells: required to pass
-
-Generate 3 hook variants (A=Stat Bomb, B=Question Provocation, C=Confident Statement or Pattern Interrupt).
-Score each. The highest scorer is the winning hook.
-
-Scripts must end with: state the answer → binary question CTA."""
 
 def get_db():
     return sqlite3.connect(DB_PATH)
@@ -140,10 +130,15 @@ def save_script(story_id, result):
     conn = get_db()
     c = conn.cursor()
 
-    winning_hook_key = result.get("winning_hook", "hook_1")
-    winning_hook_text = result.get(winning_hook_key, "")
-    winning_script_key = result.get("winning_script", "mainstream")
-    winning_script = result.get(f"{winning_script_key}_angle", "")
+    # Handle both response shapes:
+    # Simple: {"winning_hook": "text", "script": "..."}
+    # Dual-angle: {"winning_hook": "text", "mainstream_angle": "...", "contrarian_angle": "...", "winning_script": "mainstream|contrarian"}
+    winning_hook_text = result.get("winning_hook", "")
+    if result.get("script"):
+        winning_script = result.get("script", "")
+    else:
+        winning_script_key = result.get("winning_script", "mainstream")
+        winning_script = result.get(f"{winning_script_key}_angle", "")
 
     c.execute('''
         UPDATE stories SET
@@ -156,9 +151,9 @@ def save_script(story_id, result):
             status = 'scripted'
         WHERE id = ?
     ''', (
-        result.get("hook_1"),
-        result.get("hook_2"),
-        result.get("hook_3"),
+        result.get("hook_variants", [None, None, None])[0] if result.get("hook_variants") else result.get("hook_1"),
+        result.get("hook_variants", [None, None, None])[1] if result.get("hook_variants") else result.get("hook_2"),
+        result.get("hook_variants", [None, None, None])[2] if result.get("hook_variants") else result.get("hook_3"),
         winning_hook_text,
         winning_script,
         result.get("caption"),

@@ -57,18 +57,40 @@ COLOUR_MAP = {
 def get_db():
     return sqlite3.connect(DB_PATH)
 
+FORMAT_EMOJI = {
+    "F1": "🚨", "F2": "📰", "F3": "⚽", "F4": "📊",
+    "F5": "🏆", "F6": "🌟", "F7": "🔥",
+}
+FORMAT_LABEL = {
+    "F1": "CONFIRMED TRANSFER", "F2": "TRANSFER RUMOUR",
+    "F3": "MATCH PREVIEW", "F4": "POST-MATCH",
+    "F5": "TITLE RACE", "F6": "STAR SPOTLIGHT", "F7": "HOT TAKE",
+}
+
 def build_embed(story):
     fmt = story.get("format", "F7")
     score = story.get("score", 0)
-    confidence = "AUTO-RECOMMENDED" if score >= 75 else "YOUR CALL"
-    hook = story.get("winning_hook", "")
+    hook = story.get("winning_hook", story["title"])
     caption = story.get("caption", "")
-    first_line = caption.split("\n")[0] if caption else ""
+    emoji = FORMAT_EMOJI.get(fmt, "🔥")
+    label = FORMAT_LABEL.get(fmt, "HOT TAKE")
+    stars = "⭐" * min(5, max(1, score // 20))
+
+    description = f"**{hook}**"
+    if caption:
+        hashtags = " ".join([w for w in caption.split() if w.startswith("#")])
+        description += f"\n\n{hashtags}" if hashtags else ""
+
     embed = {
+        "author": {"name": f"{emoji} {label}"},
         "title": story["title"][:256],
-        "description": f"**{hook}**\n\n{caption[:800]}",
+        "description": description[:2048],
         "color": COLOUR_MAP.get(fmt, 0xE63946),
-        "footer": {"text": f"90minWaffle | {story.get('source', '')}"},
+        "fields": [
+            {"name": "Source", "value": story.get("source", "Unknown"), "inline": True},
+            {"name": "Score", "value": f"{stars} ({score}/100)", "inline": True},
+        ],
+        "footer": {"text": "90minWaffle • Football. Hot takes. No filter."},
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
     if story.get("url"):
@@ -124,7 +146,11 @@ def process_discord_queue(limit=5):
             "source": r[3], "score": r[4], "format": r[5],
             "winning_hook": r[6], "caption": r[7], "video_path": r[8]
         }
-        channel_key = FORMAT_CHANNEL.get(story["format"], "general")
+        # Route Championship source stories to #championship regardless of format
+        if story.get("source") in ("BBC Championship", "Football365"):
+            channel_key = "championship"
+        else:
+            channel_key = FORMAT_CHANNEL.get(story["format"], "general")
         log.info(f"Routing to #{channel_key}: {story['title'][:60]}")
         if post_to_discord(story, channel_key):
             conn = get_db()

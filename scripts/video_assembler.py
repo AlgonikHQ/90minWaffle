@@ -111,7 +111,7 @@ def produce_video(story):
     video=assemble(sid,clips,audio) if clips else None
     if video:
         conn=get_db(); c=conn.cursor()
-        c.execute("UPDATE stories SET video_path=?,status=\'scripted\' WHERE id=?",(video,sid))
+        c.execute("UPDATE stories SET video_path=?,status=\'video_ready\' WHERE id=?",(video,sid))
         conn.commit(); conn.close()
     return video
 if __name__=="__main__":

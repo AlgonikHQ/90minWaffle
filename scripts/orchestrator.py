@@ -9,6 +9,7 @@ import sqlite3
 import logging
 import asyncio
 import importlib.util
+from scripts.cleanup import cleanup as run_cleanup
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
@@ -119,7 +120,7 @@ async def step_overlay():
         spec = importlib.util.spec_from_file_location("text_overlay", "/root/90minwaffle/scripts/text_overlay.py")
         to = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(to)
-        done = to.process_videos(limit=5)
+        done = to.process_videos(limit=2)
         log.info(f"  Overlays applied: {done}")
         return done
     except Exception as e:
@@ -150,7 +151,7 @@ def step_discord():
     log.info("━━━ STEP 7: Discord Posting ━━━")
     try:
         dp = import_module("discord_poster", "/root/90minwaffle/scripts/discord_poster.py")
-        posted = dp.process_discord_queue(limit=5)
+        posted = dp.process_discord_queue(limit=3)
         log.info(f"  Discord posted: {posted}")
         return posted
     except Exception as e:
@@ -199,7 +200,7 @@ async def send_cycle_report(new_stories, shippable, scripted, produced, queued):
     except Exception as e:
         log.error(f"  Cycle report failed: {e}")
 
-async def run_cycle(script_limit=3, video_limit=5):
+async def run_cycle(script_limit=2, video_limit=2):
     start = datetime.now(timezone.utc)
     log.info(f"{'='*50}")
     log.info(f"90minWaffle Cycle — {start.strftime('%Y-%m-%d %H:%M UTC')}")
@@ -216,6 +217,11 @@ async def run_cycle(script_limit=3, video_limit=5):
     await step_telegram()
     await step_youtube()
     step_match_intel()
+
+    # Daily cleanup — runs once per day at 2am
+    if datetime.now(timezone.utc).hour == 2:
+        log.info("━━━ Daily Cleanup ━━━")
+        run_cleanup()
 
     elapsed = (datetime.now(timezone.utc) - start).seconds
     log.info(f"{'='*50}")
