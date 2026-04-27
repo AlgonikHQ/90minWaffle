@@ -53,15 +53,22 @@ TABLOID_ONLY_SOURCES = ["The Sun", "Daily Mirror", "Daily Star", "Daily Mail"]
 
 LOWER_LEAGUE_SIGNALS = [
     "league one", "league two", "national league", "mls", "saudi pro league",
-    "conference league", "scottish premiership", "championship"  # deprioritise
+    "conference league", "scottish premiership"
 ]
 
 # Exclude non-football noise from 90min / Sky general RSS
 NOISE_KEYWORDS = [
     "marathon", "snooker", "cricket", "golf", "tennis", "rugby", "nfl",
-    "nba", "boxing", "formula 1", "f1", "cycling", "olympics", "kit leak",
-    "boots", "adidas", "nike", "puma", "kappa", "shirt", "jersey",
-    "oktoberfest", "ikea", "instagram", "tiktok", "birthday", "celebrity"
+    "nba", "boxing", "formula 1", "formula one", "cycling", "olympics",
+    "kit leak", "boots", "adidas", "nike", "puma", "kappa", "shirt", "jersey",
+    "oktoberfest", "ikea", "instagram", "tiktok", "birthday", "celebrity",
+    "wicket", "wickets", "batting", "bowling figures", "test match", "ashes",
+    "o'sullivan", "ronnie", "crucible", "snooker world", "world snooker",
+    "fury", "joshua", "aj vs", "boxing match", "ufc", "mma", "darts",
+    "nascar", "motogp", "tour de france", "wimbledon", "six nations",
+    "super bowl", "world series", "dua lipa", "taylor swift", "celebrity",
+    "live on sky: ", "more than the score", "the most bizzare",
+    "capitals struggle", "ipl", "t20", "odi", "test cricket"
 ]
 
 FORMAT_MAP = {
@@ -210,10 +217,10 @@ def score_unscored_stories():
         if breakdown.get("disqualified"):
             status = "skipped"
             noise_count += 1
-        elif score >= 75:
+        elif score >= 45:
             status = "shippable"
             ship_count += 1
-        elif score >= 45:
+        elif score >= 30:
             status = "holding"
             hold_count += 1
         else:
