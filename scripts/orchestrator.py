@@ -68,12 +68,12 @@ def step_corroborate():
         log.error(f"  Corroboration failed: {e}")
         return 0
 
-def step_cards():
+async def step_cards():
     log.info("━━━ Cards ━━━")
     try:
         cg = import_module("card_generator", "/root/90minwaffle/scripts/card_generator.py")
-        import asyncio as _aio
-        return _aio.get_event_loop().run_until_complete(cg.process_cards(limit=5))
+        
+        return await cg.process_cards(limit=5)
     except Exception as e:
         log.error(f"  Cards failed: {e}"); return 0
 
@@ -220,7 +220,7 @@ async def run_cycle(script_limit=2, video_limit=2):
     new_stories  = step_poll()
     shippable    = step_score()
     shippable   += step_corroborate()
-    cards        = asyncio.run(step_cards())
+    cards        = await step_cards()
     scripted     = step_script(limit=script_limit)
     produced     = step_video(limit=video_limit)
     await step_overlay()
