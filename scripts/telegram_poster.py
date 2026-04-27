@@ -75,7 +75,7 @@ async def process_news_queue(limit=3):
     conn = get_db(); c = conn.cursor()
     c.execute("""SELECT id, title, url, source, score, format, winning_hook, caption, video_path
         FROM stories WHERE status='queued'
-        AND format IN ('F1','F2','F5','F7')
+        AND format IN ('F1','F2','F3','F4','F5','F6','F7')
         ORDER BY score DESC LIMIT ?""", (limit,))
     rows = c.fetchall(); conn.close()
     if not rows: log.info("No stories for News channel"); return 0
@@ -148,6 +148,57 @@ async def send_bets_card(msg):
         log.info("  Bets card sent")
     except Exception as e:
         log.error(f"  Bets send failed: {e}")
+
+async def send_quota_alert(remaining, limit):
+    if not ALERTS_CHAT: return
+    try:
+        bot = Bot(token=BOT_TOKEN)
+        pct = int((remaining / limit) * 100) if limit else 0
+        parts = [
+            "⚠️ *ElevenLabs Quota Warning*",
+            "━" * 20,
+            "Remaining: `" + str(remaining) + "` chars (`" + str(pct) + "%` left)",
+            "Limit: `" + str(limit) + "` chars/month",
+            "Videos will be skipped until quota resets.",
+            "_Upgrade at elevenlabs.io if needed_"
+        ]
+        msg = "\n".join(parts)
+        await bot.send_message(chat_id=ALERTS_CHAT, text=msg, parse_mode=ParseMode.MARKDOWN)
+        log.info("  Quota alert sent")
+    except Exception as e:
+        log.error(f"  Quota alert failed: {e}")
+
+async def send_rss_alert(feed_name, error):
+    if not ALERTS_CHAT: return
+    try:
+        bot = Bot(token=BOT_TOKEN)
+        parts = ["⚠️ *RSS Feed Failure*", "", "Feed: `" + str(feed_name) + "`", "Error: `" + str(error)[:200] + "`"]
+        msg = "\n".join(parts)
+        await bot.send_message(chat_id=ALERTS_CHAT, text=msg, parse_mode=ParseMode.MARKDOWN)
+    except Exception as e:
+        log.error(f"  RSS alert failed: {e}")
+
+async def send_midnight_summary(stats):
+    if not REPORTS_CHAT: return
+    try:
+        bot = Bot(token=BOT_TOKEN)
+        from datetime import datetime, timezone
+        date_str = datetime.now(timezone.utc).strftime("%d %b %Y")
+        parts = [
+            "📋 *90minWaffle Daily Summary*",
+            "━" * 20,
+            "Stories ingested: `" + str(stats.get("stories", 0)) + "`",
+            "Shippable: `" + str(stats.get("shippable", 0)) + "`",
+            "Videos produced: `" + str(stats.get("videos", 0)) + "`",
+            "Posts sent: `" + str(stats.get("posted", 0)) + "`",
+            "━" * 20,
+            "_90minWaffle — " + date_str + "_"
+        ]
+        msg = "\n".join(parts)
+        await bot.send_message(chat_id=REPORTS_CHAT, text=msg, parse_mode=ParseMode.MARKDOWN)
+        log.info("  Midnight summary sent")
+    except Exception as e:
+        log.error(f"  Midnight summary failed: {e}")
 
 if __name__ == "__main__":
     asyncio.run(process_news_queue(limit=3))

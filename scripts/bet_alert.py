@@ -8,7 +8,7 @@ API_FOOTBALL_KEY  = os.getenv("API_FOOTBALL_KEY")
 API_FOOTBALL_URL  = os.getenv("API_FOOTBALL_URL", "https://v3.football.api-sports.io")
 DISCORD_BETS      = os.getenv("DISCORD_WEBHOOK_BETS")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_BETS_CHAT = os.getenv("TELEGRAM_BETS_CHAT_ID")
+TELEGRAM_BETS_CHANNEL = os.getenv("TELEGRAM_BETS_CHANNEL")
 DB_PATH           = "/root/90minwaffle/data/waffle.db"
 LOG_PATH          = "/root/90minwaffle/logs/bet_alert.log"
 

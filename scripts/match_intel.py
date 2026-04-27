@@ -6,6 +6,8 @@ load_dotenv("/root/90minwaffle/.env")
 
 ODDS_API_KEY  = os.getenv("ODDS_API_KEY")
 DISCORD_BETS  = os.getenv("DISCORD_WEBHOOK_BETS")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_BETS  = int(os.getenv("TELEGRAM_BETS_CHANNEL", 0))
 DB_PATH       = "/root/90minwaffle/data/waffle.db"
 LOG_PATH      = "/root/90minwaffle/logs/match_intel.log"
 

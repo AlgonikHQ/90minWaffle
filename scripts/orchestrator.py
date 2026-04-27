@@ -197,6 +197,17 @@ def step_match_intel():
     except Exception as e:
         log.error(f"  Match Intel failed: {e}")
 
+def step_bet_alerts():
+    log.info("━━━ STEP 9: Bet Alerts ━━━")
+    try:
+        ba = import_module("bet_alert", "/root/90minwaffle/scripts/bet_alert.py")
+        sent = ba.run_bet_alerts()
+        log.info(f"  Bet alerts sent: {sent}")
+        return sent
+    except Exception as e:
+        log.error(f"  Bet alerts failed: {e}")
+        return 0
+
 def step_data_refresh():
     log.info("━━━ STEP 0: Data Refresh ━━━")
     try:
@@ -255,7 +266,7 @@ async def send_cycle_report(new_stories, shippable, scripted, produced, queued):
             f"🎬 Videos produced: `{produced}`\n"
             f"📤 Sent to queue: `{queued}`\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"_Next cycle in 2 hours_"
+            f"_Next cycle in 1 hour_"
         )
         await qn.send_report(msg)
         # Also send to Inside channel (private dev channel)
@@ -284,10 +295,43 @@ async def run_cycle(script_limit=2, video_limit=2):
     await step_youtube()
     step_match_intel()
 
+    # Bet alerts — every cycle
+    step_bet_alerts()
+
     # Daily cleanup — runs once per day at 2am
     if datetime.now(timezone.utc).hour == 2:
         log.info("━━━ Daily Cleanup ━━━")
         import_module("cleanup", "/root/90minwaffle/scripts/cleanup.py").cleanup()
+
+    # Midnight daily summary to Reports channel
+    if datetime.now(timezone.utc).hour == 0:
+        log.info("━━━ Midnight Summary ━━━")
+        try:
+            tp = import_module("telegram_poster", "/root/90minwaffle/scripts/telegram_poster.py")
+            conn = get_db(); c = conn.cursor()
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            c.execute("SELECT COUNT(*) FROM stories WHERE date(created_at) = ?", (today,))
+            s = c.fetchone()[0]
+            c.execute("SELECT COUNT(*) FROM stories WHERE status='shippable' AND date(created_at) = ?", (today,))
+            sh = c.fetchone()[0]
+            c.execute("SELECT COUNT(*) FROM stories WHERE video_path IS NOT NULL AND date(updated_at) = ?", (today,))
+            v = c.fetchone()[0]
+            c.execute("SELECT COUNT(*) FROM stories WHERE status='published' AND date(updated_at) = ?", (today,))
+            p = c.fetchone()[0]
+            conn.close()
+            await tp.send_midnight_summary({"stories": s, "shippable": sh, "videos": v, "posted": p})
+        except Exception as e:
+            log.error(f"  Midnight summary failed: {e}")
+
+    # ElevenLabs quota check — alert if under 10%
+    try:
+        va = import_module("video_assembler", "/root/90minwaffle/scripts/video_assembler.py")
+        tp = import_module("telegram_poster", "/root/90minwaffle/scripts/telegram_poster.py")
+        remaining = va.check_eleven_quota()
+        if 0 < remaining < 1000:
+            await tp.send_quota_alert(remaining, 10000)
+    except Exception as e:
+        log.error(f"  Quota check failed: {e}")
 
     elapsed = (datetime.now(timezone.utc) - start).seconds
     log.info(f"{'='*50}")
