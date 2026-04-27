@@ -76,24 +76,19 @@ async def send_queue_item(story):
     chat_id = int(QUEUE_CHAT)
 
     try:
-        # Send video if it exists, otherwise send text card
-        if video_path and os.path.exists(video_path):
-            with open(video_path, "rb") as vf:
-                sent = await bot.send_video(
-                    chat_id=chat_id,
-                    video=vf,
-                    caption=msg_text,
-                    parse_mode=None,
-                    supports_streaming=True
-                )
-            log.info(f"  ✅ Video queued — msg_id: {sent.message_id}")
-        else:
-            sent = await bot.send_message(
+        # Only send to Queue if a real video exists — no text fallback
+        if not video_path or not os.path.exists(video_path):
+            log.info("  Queue skipped — no video available")
+            return None
+        with open(video_path, "rb") as vf:
+            sent = await bot.send_video(
                 chat_id=chat_id,
-                text=msg_text,
-                parse_mode=ParseMode.MARKDOWN
+                video=vf,
+                caption=msg_text,
+                parse_mode=None,
+                supports_streaming=True
             )
-            log.info(f"  ✅ Text card queued — msg_id: {sent.message_id}")
+        log.info(f"  ✅ Video queued — msg_id: {sent.message_id}")
 
         return sent.message_id
 
@@ -108,7 +103,7 @@ async def send_alert(message):
         await bot.send_message(
             chat_id=int(ALERTS_CHAT),
             text=message,
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode=None
         )
         log.info("Alert sent")
     except Exception as e:
@@ -121,7 +116,7 @@ async def send_report(message):
         await bot.send_message(
             chat_id=int(REPORTS_CHAT),
             text=message,
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode=None
         )
         log.info("Report sent")
     except Exception as e:

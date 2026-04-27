@@ -1,104 +1,56 @@
-# 90minWaffle 🧇⚽
+# trading-stack
 
-Autonomous UK football content brand. RSS to script to video to Discord/Telegram/YouTube — fully automated. No human intervention required after deployment.
+Transparent documentation of a live algo trading infrastructure — built in public by [@AlgonikHQ](https://x.com/AlgonikHQ).
 
-**Status:** Live — hourly cycles, 7 Discord channels, 6 Telegram channels
-**Built by:** [@AlgonikHQ](https://twitter.com/90minwaffle) — part of the FIRE@45 automated income stack
+## What is this?
 
----
+This repo documents the engineering behind a fully automated, multi-strategy trading stack running 24/7 on a Hetzner VPS. The goal is simple: build toward financial independence at 45 through automated systems, and do it in public.
 
-## Pipeline
+Every system here is live and trading real capital. This repo shows the architecture, infrastructure, and risk framework — not the strategy logic (that stays closed source).
 
-RSS Feeds -> Score -> Corroborate -> Script (Claude AI) -> Video (ElevenLabs + Pexels) -> Discord + Telegram + YouTube
+## The Stack
 
----
+| System | Market | Status |
+|--------|--------|--------|
+| **OANDA Forex Bot** | FX — 9 pairs, M15 | 📄 Paper (go-live May 2026) |
+| **Solana Sniper** | Solana memecoins | 🟢 Live |
+| **OSC Scalper** | Established memecoins | 🟢 Live |
+| **StatiqFC** | Football edge alerts | 🟢 Live |
 
-## Stack
+## The Goal
 
-| Component | Technology |
-|---|---|
-| Scripting | Claude claude-opus-4-5 (JSON-enforced, dual-angle) |
-| Voice | ElevenLabs only — no fallbacks ever |
-| Video clips | Pexels API |
-| Distribution | Discord (7 channels) + Telegram (6 channels) + YouTube |
-| Odds intel | Odds API + API-Football |
-| Football data | football-data.org (standings, results, scorers) |
-| Storage | SQLite (data/waffle.db) |
-| Runtime | systemd, hourly cycles, Ubuntu 24.04 (Hetzner VPS) |
+FIRE at 45 (2032). Target: ~£855,000.
 
----
+Four parallel automated income streams compound into a tax-efficient ISA flywheel:
+- Spread betting profits (tax-free under UK law) → ISA top-ups
+- ISA dividends eventually fund bot capital → salary removed from equation
+- Solana sniper + OSC scalper gains → crypto accumulation
 
-## RSS Sources
+This repo is the engineering layer of that plan. Follow along on X at [@AlgonikHQ](https://x.com/AlgonikHQ).
 
-| Source | Tier |
-|---|---|
-| BBC Sport Football | 1 |
-| Sky Sports Football | 1 |
-| Guardian Football | 2 |
-| ESPN FC | 2 |
-| 90min | 2 |
-| Goal.com | 2 |
-| Football365 | 2 |
-| BBC Championship | 2 |
-| Transfermarkt | 3 |
+## What's Open vs Closed
 
----
+| Open (this repo) | Closed (private) |
+|-----------------|-----------------|
+| System architecture | Entry/exit signal logic |
+| Risk framework & position sizing | Indicator parameters & thresholds |
+| Session & filter rules | Backtests & forward test data |
+| Infrastructure & deployment | Live P&L beyond public Telegram |
+| Telegram alert structure | Strategy source code |
 
-## Discord Channels
+## Infrastructure
 
-| Channel | Formats | Content |
-|---|---|---|
-| #breaking_news | F1, F2 | Confirmed transfers + rumours |
-| #match_day | F3, F4 | Previews + post-match |
-| #premier_league | F5 | Title race + weekly standings digest |
-| #championship | BBC Champ/F365 | EFL Championship |
-| #hot_takes | F7 | Opinions + community polls |
-| #general | F6 | Star spotlights |
-| #bets | Odds API | Daily value bets |
+- **VPS:** Hetzner Ubuntu 24.04 (dedicated)
+- **Process management:** systemd services
+- **Languages:** Python 3
+- **Alerts:** Telegram bot (public + private channels per system)
+- **Remote access:** Termius (mobile), SCP/PowerShell (Windows)
 
-## Telegram Channels
+## Follow the Build
 
-| Channel | Content |
-|---|---|
-| News (public) | All formats F1-F7 with social buttons |
-| Bets (public) | Value bet alerts with odds and edge % |
-| Inside (private) | Hourly cycle reports |
-| Queue (private) | Videos ready for Reels/TikTok |
-| Reports (private) | Midnight daily summary |
-| Alerts (private) | ElevenLabs quota warnings + RSS failures |
+- X: [@AlgonikHQ](https://x.com/AlgonikHQ)
+- Telegram alerts: linked per system in each folder
+
+*This is not financial advice. All systems trade real capital at real risk. Documentation shared for educational and transparency purposes only.*
 
 ---
-
-## Video Logic
-
-- ElevenLabs voiceover only — no robot voice fallbacks ever
-- Max 3 videos per day, score >= 75 required
-- Max 1 video per cycle spread across the day
-- ElevenLabs quota pre-checked before every video attempt
-- All other stories post as branded cards with source links and social buttons
-
-## Automated Schedule
-
-| Time | Output |
-|---|---|
-| Every hour | RSS poll, score, script, card/video, all channels |
-| 8am daily | PL + Championship standings digest |
-| 9am daily | Match intel + value bets |
-| Midnight | Daily summary to Reports channel |
-| Sunday 9am BST | Podcast PDF to Inside channel |
-
----
-
-## Versions
-
-- **v1.0** — Full autonomous pipeline
-- **v1.1** — Discord 7 channels, Telegram, Match Intel, Bet Alert
-- **v1.2** — ElevenLabs + gTTS fallback
-- **v1.3** — Script fixes, 4 new RSS feeds, Championship routing, Discord embeds
-- **v2.0** — ElevenLabs-only, daily video cap, score gate, quota pre-check
-- **v2.1** — Hourly cycles, all channels wired, branded cards, social buttons, polls
-- **v2.2** — Daily standings digest, top scorers, Sunday podcast PDF
-
----
-
-*Part of the AlgonikHQ FIRE@45 automated income stack. Follow [@90minWaffle](https://twitter.com/90minwaffle)*
