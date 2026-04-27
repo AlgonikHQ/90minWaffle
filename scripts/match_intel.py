@@ -110,6 +110,21 @@ def post_discord(embed):
         return False
     try:
         r = requests.post(DISCORD_BETS, json={"embeds": [embed]}, timeout=15)
+        # Also fire to Telegram bets channel
+        try:
+            import asyncio
+            from telegram import Bot
+            from telegram.constants import ParseMode
+            tg_bot = Bot(token=os.getenv("TELEGRAM_BOT_TOKEN"))
+            bets_chat = int(os.getenv("TELEGRAM_BETS_CHANNEL", 0))
+            if bets_chat:
+                tg_msg = f"📊 *Match Intel — {embed.get('title','Odds Update')}*\n\n{embed.get('description','')}"
+                asyncio.get_event_loop().run_until_complete(
+                    tg_bot.send_message(chat_id=bets_chat, text=tg_msg[:4096], parse_mode=ParseMode.MARKDOWN)
+                )
+                log.info("  Bets card sent to Telegram")
+        except Exception as te:
+            log.error(f"  Telegram bets failed: {te}")
         if r.status_code in [200, 204]:
             log.info(f"Posted: {embed.get('title','')[:60]}")
             return True

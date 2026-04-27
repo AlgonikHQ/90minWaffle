@@ -197,6 +197,9 @@ async def send_cycle_report(new_stories, shippable, scripted, produced, queued):
             f"_Next cycle in 2 hours_"
         )
         await qn.send_report(msg)
+        # Also send to Inside channel (private dev channel)
+        tp = import_module("telegram_poster", "/root/90minwaffle/scripts/telegram_poster.py")
+        await tp.send_report(msg)
     except Exception as e:
         log.error(f"  Cycle report failed: {e}")
 
