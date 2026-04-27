@@ -42,33 +42,25 @@ def check_eleven_quota():
 def get_sportsdb_images(story):
     """Get SportsDB images to use as video backgrounds instead of Pexels."""
     try:
-        import importlib.util, sqlite3 as _sq
+        import importlib.util
         spec = importlib.util.spec_from_file_location("sportsdb", "/root/90minwaffle/scripts/sportsdb.py")
         sdb = importlib.util.module_from_spec(spec); spec.loader.exec_module(sdb)
-        star_players = [r[0] for r in _sq.connect(DB_PATH).execute("SELECT player_name FROM star_index").fetchall()]
         title = story.get("title", "")
+        hook = story.get("winning_hook", "")
+        text = f"{title} {hook}"
         images = []
-        # Try player image first
-        players = sdb.extract_players_from_title(title, star_players)
-        if players:
-            url = sdb.get_player_image(players[0], "thumb")
-            if url: images.append(url)
-        # Team images
-        teams = sdb.extract_teams_from_title(title)
-        for team in teams[:2]:
-            for itype in ["fanart", "banner"]:
-                url = sdb.get_team_image(team, itype)
-                if url and url not in images: images.append(url); break
-        # League fanart as fallback
-        if len(images) < 4:
-            if "champions league" in title.lower():
-                for i in range(1,5):
-                    url = sdb.get_league_image("champions league", "fanart")
-                    if url and url not in images: images.append(url)
-            else:
-                for i in range(4 - len(images)):
-                    url = sdb.get_league_image("premier league", "fanart")
-                    if url and url not in images: images.append(url)
+        team = sdb.find_team_in_text(text)
+        team_id = team.get("idTeam") if team else None
+        player_names = sdb.extract_player_names(text)
+        for name in player_names[:2]:
+            url = sdb.find_player_image(name, team_id)
+            if url and url not in images: images.append(url)
+            if len(images) >= 2: break
+        if team:
+            for field in ["strTeamBadge","strTeamBanner","strTeamFanart1","strTeamFanart2","strTeamFanart3","strTeamFanart4"]:
+                if len(images) >= 4: break
+                url = team.get(field)
+                if url and url not in images: images.append(url)
         return images[:4]
     except Exception as e:
         log.warning("SportsDB video images failed: " + str(e))

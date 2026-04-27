@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-import os, sqlite3, logging, requests, asyncio
+import os, sqlite3, logging, requests, asyncio, sys
+sys.path.insert(0, "/root/90minwaffle/scripts")
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from telegram import Bot
@@ -11,6 +12,9 @@ LOG_PATH = "/root/90minwaffle/logs/card_generator.log"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[logging.FileHandler(LOG_PATH), logging.StreamHandler()])
 log = logging.getLogger(__name__)
+try:
+    import sportsdb as sdb
+except:sdb=None
 
 BOT_TOKEN    = os.getenv("TELEGRAM_BOT_TOKEN")
 NEWS_CHANNEL = int(os.getenv("TELEGRAM_NEWS_CHANNEL", 0))
@@ -49,8 +53,7 @@ def build_discord_card(story):
     # SportsDB image
     try:
         sdb = _get_sportsdb()
-        star_players = [r[0] for r in sqlite3.connect(DB_PATH).execute("SELECT player_name FROM star_index").fetchall()]
-        img_url, _ = sdb.get_best_image_for_story(story.get("title",""), star_players=star_players)
+        img_url = sdb.get_image_for_story(story.get("title",""), story.get("winning_hook",""))
         if img_url: embed["image"] = {"url": img_url}
     except Exception as e:
         log.warning("SportsDB image failed: " + str(e))
@@ -107,12 +110,10 @@ async def post_telegram_card(story):
         # Try to get SportsDB image for photo post
         img_url = None
         try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("sportsdb", "/root/90minwaffle/scripts/sportsdb.py")
-            sdb = importlib.util.module_from_spec(spec); spec.loader.exec_module(sdb)
-            star_players = [r[0] for r in sqlite3.connect(DB_PATH).execute("SELECT player_name FROM star_index").fetchall()]
-            img_url, _ = sdb.get_best_image_for_story(story.get("title",""), star_players=star_players)
-        except: pass
+            sdb = _get_sportsdb()
+            img_url = sdb.get_image_for_story(story.get("title",""), story.get("winning_hook",""))
+        except Exception as e:
+            log.warning("SportsDB Telegram image failed: " + str(e))
         if img_url:
             await bot.send_photo(chat_id=NEWS_CHANNEL, photo=img_url,
                 caption=text, parse_mode="Markdown", reply_markup=markup)
