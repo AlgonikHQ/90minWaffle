@@ -208,6 +208,15 @@ def step_bet_alerts():
         log.error(f"  Bet alerts failed: {e}")
         return 0
 
+async def step_podcast():
+    log.info("━━━ STEP 11: Podcast PDF ━━━")
+    try:
+        pg = import_module("podcast_gen", "/root/90minwaffle/scripts/podcast_gen.py")
+        path = await pg.run_podcast()
+        log.info(f"  Podcast PDF: {path}")
+    except Exception as e:
+        log.error(f"  Podcast PDF failed: {e}")
+
 def step_digest():
     log.info("\u2501\u2501\u2501 STEP 10: Daily Digest \u2501\u2501\u2501")
     try:
@@ -300,7 +309,7 @@ async def send_cycle_report(new_stories, shippable, scripted, produced, queued):
     except Exception as e:
         log.error(f"  Cycle report failed: {e}")
 
-async def run_cycle(script_limit=2, video_limit=2):
+async def run_cycle(script_limit=2, video_limit=2, force_digest=False, force_podcast=False):
     start = datetime.now(timezone.utc)
     log.info(f"{'='*50}")
     log.info(f"90minWaffle Cycle — {start.strftime('%Y-%m-%d %H:%M UTC')}")
@@ -324,8 +333,12 @@ async def run_cycle(script_limit=2, video_limit=2):
     step_bet_alerts()
 
     # Daily digest — standings + top scorers at 8am
-    if datetime.now(timezone.utc).hour == 8:
+    if datetime.now(timezone.utc).hour == 8 or force_digest:
         step_digest()
+
+    # Podcast PDF — Sundays at 9am
+    if (datetime.now(timezone.utc).weekday() == 6 and datetime.now(timezone.utc).hour == 9) or force_podcast:
+        await step_podcast()
 
     # Daily cleanup — runs once per day at 2am
     if datetime.now(timezone.utc).hour == 2:
@@ -390,6 +403,8 @@ if __name__ == "__main__":
     parser.add_argument("--interval", type=int, default=60, help="Loop interval in minutes")
     parser.add_argument("--scripts", type=int, default=3, help="Max scripts per cycle")
     parser.add_argument("--videos", type=int, default=2, help="Max videos per cycle")
+    parser.add_argument("--force-digest", action="store_true", help="Force daily digest now")
+    parser.add_argument("--force-podcast", action="store_true", help="Force podcast PDF now")
     args = parser.parse_args()
 
     if args.loop:
