@@ -83,7 +83,7 @@ async def send_queue_item(story):
                     chat_id=chat_id,
                     video=vf,
                     caption=msg_text,
-                    parse_mode=ParseMode.MARKDOWN,
+                    parse_mode=None,
                     supports_streaming=True
                 )
             log.info(f"  ✅ Video queued — msg_id: {sent.message_id}")
@@ -136,7 +136,7 @@ async def process_queue():
         SELECT id, title, source, score, format,
                winning_hook, script, caption, video_path
         FROM stories
-        WHERE status = 'scripted' AND video_path IS NOT NULL
+        WHERE status = 'video_ready' AND video_path IS NOT NULL
         ORDER BY score DESC
         LIMIT 5
     """)
@@ -184,7 +184,7 @@ if __name__ == "__main__":
     c.execute("""
         SELECT id, title, source, score, format,
                winning_hook, script, caption, video_path
-        FROM stories WHERE status = 'scripted' AND video_path IS NOT NULL
+        FROM stories WHERE status = 'video_ready' AND video_path IS NOT NULL
         ORDER BY score DESC LIMIT 1
     """)
     r = c.fetchone()
@@ -197,6 +197,6 @@ if __name__ == "__main__":
             "script": r[6], "caption": r[7],
             "video_path": f"/root/90minwaffle/data/test_video_{r[0]}.mp4"
         }
-        asyncio.run(send_queue_item(story))
+        asyncio.run(process_queue())
     else:
         print("No scripted stories found")

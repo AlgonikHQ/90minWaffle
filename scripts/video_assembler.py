@@ -48,8 +48,7 @@ def generate_voiceover(script,story_id):
         with open(out,"wb") as f: f.write(r.content)
         log.info(f"  ElevenLabs voiceover saved: {out}"); return out
     if r.status_code == 401 and "quota" in r.text.lower():
-        log.warning("  ElevenLabs quota exhausted — falling back to gTTS")
-        return generate_gtts_voiceover(format_script(script), out)
+        log.warning("  ElevenLabs quota exhausted — skipping video until quota resets"); return None
     log.error(f"  ElevenLabs error: {r.status_code} {r.text[:200]}"); return None
 def is_womens_story(title):
     t=title.lower()

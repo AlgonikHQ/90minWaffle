@@ -9,7 +9,6 @@ import sqlite3
 import logging
 import asyncio
 import importlib.util
-from scripts.cleanup import cleanup as run_cleanup
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
@@ -224,7 +223,7 @@ async def run_cycle(script_limit=2, video_limit=2):
     # Daily cleanup — runs once per day at 2am
     if datetime.now(timezone.utc).hour == 2:
         log.info("━━━ Daily Cleanup ━━━")
-        run_cleanup()
+        import_module("cleanup", "/root/90minwaffle/scripts/cleanup.py").cleanup()
 
     elapsed = (datetime.now(timezone.utc) - start).seconds
     log.info(f"{'='*50}")
