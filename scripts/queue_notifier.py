@@ -45,25 +45,9 @@ def confidence_label(score):
     return "QUIET DAY ONLY"
 
 def format_queue_message(story):
-    score = story["score"]
-    fmt = story["format"]
-    emoji = confidence_emoji(score)
-    label = confidence_label(score)
-    fmt_name = FORMAT_NAMES.get(fmt, fmt)
-
-    msg = (
-        f"{emoji} *90minWaffle Queue*\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"*{story['title']}*\n\n"
-        f"📊 Score: `{score}/100` — {label}\n"
-        f"🎬 Format: `{fmt}` — {fmt_name}\n"
-        f"📰 Source: {story['source']}\n\n"
-        f"*Hook:*\n_{story['winning_hook']}_\n\n"
-        f"*Caption (copy-ready):*\n```\n{story['caption']}\n```\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"Actions: Publish 📤 | Bin ❌ | Delay ⏰ | Regen 🔄\n"
-        f"_(Reply with P / B / D / R to action)_"
-    )
+    hook = story.get("winning_hook") or story["title"]
+    caption = story.get("caption", "")
+    msg = "🎬 *" + hook + "*\n\n" + caption + "\n\n━━━━━━━━━━━━━━━━━━━━\n🐦 @90minWaffle on X | 📺 YouTube | 🎵 TikTok"
     return msg
 
 def get_db():
