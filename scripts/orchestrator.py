@@ -208,6 +208,18 @@ def step_bet_alerts():
         log.error(f"  Bet alerts failed: {e}")
         return 0
 
+def step_digest():
+    log.info("\u2501\u2501\u2501 STEP 10: Daily Digest \u2501\u2501\u2501")
+    try:
+        import asyncio as _asyncio
+        dg = import_module("digest_poster", "/root/90minwaffle/scripts/digest_poster.py")
+        sent = _asyncio.get_event_loop().run_until_complete(dg.run_digest())
+        log.info(f"  Digest posted: {sent}")
+        return sent
+    except Exception as e:
+        log.error(f"  Digest failed: {e}")
+        return 0
+
 def step_data_refresh():
     log.info("━━━ STEP 0: Data Refresh ━━━")
     try:
@@ -224,6 +236,19 @@ def step_discord():
     try:
         dp = import_module("discord_poster", "/root/90minwaffle/scripts/discord_poster.py")
         posted = dp.process_discord_queue(limit=3)
+        # Post poll after every F7 hot take
+        conn = get_db(); c = conn.cursor()
+        c.execute("""SELECT id, title, winning_hook, format FROM stories
+            WHERE status='published' AND format='F7'
+            AND (notes IS NULL OR notes NOT LIKE '%poll_sent%')
+            ORDER BY id DESC LIMIT 2""")
+        hot_takes = c.fetchall(); conn.close()
+        for ht in hot_takes:
+            story = {"id": ht[0], "title": ht[1], "winning_hook": ht[2], "format": ht[3]}
+            dp.post_poll(story, "hot_takes")
+            conn = get_db(); c = conn.cursor()
+            c.execute("UPDATE stories SET notes='poll_sent' WHERE id=?", (ht[0],))
+            conn.commit(); conn.close()
         log.info(f"  Discord posted: {posted}")
         return posted
     except Exception as e:
@@ -297,6 +322,10 @@ async def run_cycle(script_limit=2, video_limit=2):
 
     # Bet alerts — every cycle
     step_bet_alerts()
+
+    # Daily digest — standings + top scorers at 8am
+    if datetime.now(timezone.utc).hour == 8:
+        step_digest()
 
     # Daily cleanup — runs once per day at 2am
     if datetime.now(timezone.utc).hour == 2:

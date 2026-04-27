@@ -120,6 +120,29 @@ def post_to_discord(story, channel_key):
         log.error(f"Post failed: {e}")
         return False
 
+
+def post_poll(story, channel_key):
+    """Post a Discord poll after a hot take story."""
+    webhook_url = WEBHOOKS.get(channel_key)
+    if not webhook_url: return False
+    hook = story.get("winning_hook", story.get("title", ""))[:100]
+    embed = {
+        "author": {"name": "\U0001f5f3\ufe0f  COMMUNITY POLL"},
+        "title": "What do you think?",
+        "description": "**" + hook + "**\n\n\U0001f7e2 React \u2705 to AGREE\n\U0001f534 React \u274c to DISAGREE",
+        "color": 0xFF4500,
+        "footer": {"text": "90minWaffle • Football. Hot takes. No filter. | twitter.com/90minwaffle"},
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    try:
+        r = requests.post(webhook_url, json={"embeds": [embed]}, timeout=15)
+        if r.status_code in (200, 204):
+            log.info(f"  Poll posted to #{channel_key}")
+            return True
+        return False
+    except Exception as e:
+        log.error(f"  Poll post failed: {e}")
+        return False
 def process_discord_queue(limit=5):
     conn = get_db()
     c = conn.cursor()
