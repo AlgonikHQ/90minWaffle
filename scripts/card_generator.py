@@ -31,6 +31,12 @@ COLOUR_MAP     = {"F1":0x00FF87,"F2":0xE63946,"F3":0x4361EE,"F4":0xF77F00,"F5":0
 
 def get_db(): return sqlite3.connect(DB_PATH)
 
+def _get_sportsdb():
+    import importlib.util, sys
+    spec = importlib.util.spec_from_file_location("sportsdb", "/root/90minwaffle/scripts/sportsdb.py")
+    m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    return m
+
 def build_discord_card(story):
     fmt=story["format"]
     hook=story.get("winning_hook") or story["title"]
@@ -40,6 +46,14 @@ def build_discord_card(story):
     if hashtags: description+=f"\n\n{hashtags}"
     embed={"author":{"name":f"{FORMAT_EMOJI.get(fmt,'🔥')}  {FORMAT_LABEL.get(fmt,'HOT TAKE')}"},"title":story["title"][:256],"description":description[:2048],"color":COLOUR_MAP.get(fmt,0xE63946),"fields":[{"name":"Source","value":story.get("source",""),"inline":True}],"footer":{"text":"90minWaffle • Football. Hot takes. No filter."},"timestamp":datetime.now(timezone.utc).isoformat()}
     if story.get("url"): embed["url"]=story["url"]
+    # SportsDB image
+    try:
+        sdb = _get_sportsdb()
+        star_players = [r[0] for r in sqlite3.connect(DB_PATH).execute("SELECT player_name FROM star_index").fetchall()]
+        img_url, _ = sdb.get_best_image_for_story(story.get("title",""), star_players=star_players)
+        if img_url: embed["image"] = {"url": img_url}
+    except Exception as e:
+        log.warning("SportsDB image failed: " + str(e))
     return embed
 
 def build_telegram_card(story):
@@ -90,7 +104,20 @@ async def post_telegram_card(story):
         bot=Bot(token=BOT_TOKEN)
         text=build_telegram_card(story)
         markup=build_telegram_buttons(story)
-        await bot.send_message(chat_id=NEWS_CHANNEL,text=text,parse_mode="Markdown",reply_markup=markup)
+        # Try to get SportsDB image for photo post
+        img_url = None
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("sportsdb", "/root/90minwaffle/scripts/sportsdb.py")
+            sdb = importlib.util.module_from_spec(spec); spec.loader.exec_module(sdb)
+            star_players = [r[0] for r in sqlite3.connect(DB_PATH).execute("SELECT player_name FROM star_index").fetchall()]
+            img_url, _ = sdb.get_best_image_for_story(story.get("title",""), star_players=star_players)
+        except: pass
+        if img_url:
+            await bot.send_photo(chat_id=NEWS_CHANNEL, photo=img_url,
+                caption=text, parse_mode="Markdown", reply_markup=markup)
+        else:
+            await bot.send_message(chat_id=NEWS_CHANNEL,text=text,parse_mode="Markdown",reply_markup=markup)
         log.info(f"  Telegram: {story['title'][:60]}"); return True
     except Exception as e: log.error(f"  Telegram failed: {e}"); return False
 

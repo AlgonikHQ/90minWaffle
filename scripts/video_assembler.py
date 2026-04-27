@@ -39,6 +39,60 @@ def check_eleven_quota():
         log.warning(f"  ElevenLabs quota check error: {e}")
         return 0
 
+def get_sportsdb_images(story):
+    """Get SportsDB images to use as video backgrounds instead of Pexels."""
+    try:
+        import importlib.util, sqlite3 as _sq
+        spec = importlib.util.spec_from_file_location("sportsdb", "/root/90minwaffle/scripts/sportsdb.py")
+        sdb = importlib.util.module_from_spec(spec); spec.loader.exec_module(sdb)
+        star_players = [r[0] for r in _sq.connect(DB_PATH).execute("SELECT player_name FROM star_index").fetchall()]
+        title = story.get("title", "")
+        images = []
+        # Try player image first
+        players = sdb.extract_players_from_title(title, star_players)
+        if players:
+            url = sdb.get_player_image(players[0], "thumb")
+            if url: images.append(url)
+        # Team images
+        teams = sdb.extract_teams_from_title(title)
+        for team in teams[:2]:
+            for itype in ["fanart", "banner"]:
+                url = sdb.get_team_image(team, itype)
+                if url and url not in images: images.append(url); break
+        # League fanart as fallback
+        if len(images) < 4:
+            if "champions league" in title.lower():
+                for i in range(1,5):
+                    url = sdb.get_league_image("champions league", "fanart")
+                    if url and url not in images: images.append(url)
+            else:
+                for i in range(4 - len(images)):
+                    url = sdb.get_league_image("premier league", "fanart")
+                    if url and url not in images: images.append(url)
+        return images[:4]
+    except Exception as e:
+        log.warning("SportsDB video images failed: " + str(e))
+        return []
+
+def download_image_as_video(img_url, out_path, duration=10):
+    """Download an image and convert to a video clip using ffmpeg."""
+    try:
+        import tempfile
+        r = requests.get(img_url, timeout=15)
+        if r.status_code != 200: return False
+        ext = ".png" if img_url.endswith(".png") else ".jpg"
+        tmp = out_path.replace(".mp4", "_img" + ext)
+        open(tmp, "wb").write(r.content)
+        cmd = ["ffmpeg", "-y", "-loop", "1", "-i", tmp,
+               "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z=1.04:d=" + str(duration*25) + ":s=1080x1920",
+               "-c:v", "libx264", "-t", str(duration), "-pix_fmt", "yuv420p",
+               "-r", "25", out_path]
+        result = subprocess.run(cmd, capture_output=True, timeout=60)
+        import os; os.remove(tmp)
+        return result.returncode == 0
+    except Exception as e:
+        log.warning("Image to video failed: " + str(e)); return False
+
 def format_script(s):
     for w in ["done deal","confirmed","official","breaking","here we go","signed","champions","relegated","sacked","appointed"]:
         s=s.replace(w,w.upper()).replace(w.title(),w.upper())
@@ -62,27 +116,42 @@ def is_womens_story(title):
     return any(k in t for k in WOMEN_KEYWORDS)
 
 def fetch_clips(fmt,story_id,n=4,title=""):
+    """Fetch SportsDB images and convert to video clips. No Pexels, no fallbacks."""
     os.makedirs(BROLL_DIR,exist_ok=True)
-    pool=BROLL_QUERIES_WOMEN if is_womens_story(title) else BROLL_QUERIES
-    queries=random.sample(pool.get(fmt,pool["F7"]),min(n,4))
-    clips=[]
-    for i,q in enumerate(queries):
-        log.info(f"  Fetching clip {i+1}: {q}")
+    story = {"title": title, "format": fmt}
+    images = get_sportsdb_images(story)
+    if not images:
+        log.warning(f"  No SportsDB images found for: {title[:50]} — skipping video")
+        return []
+    # Pad to n images by cycling
+    while len(images) < n:
+        images.append(images[len(images) % len(images)])
+    images = images[:n]
+    clips = []
+    for i, img_url in enumerate(images):
+        log.info(f"  SportsDB image {i+1}: {img_url[:60]}")
         try:
-            vids=[]
-            for ori in ["portrait","landscape"]:
-                r=requests.get("https://api.pexels.com/videos/search",headers={"Authorization":PEXELS_KEY},params={"query":q,"per_page":15,"orientation":ori,"size":"medium"},timeout=10)
-                vids=r.json().get("videos",[])
-                if vids: break
-            if not vids: continue
-            v=random.choice(vids); files=v.get("video_files",[])
-            chosen=next((f for f in files if f.get("quality") in ["hd","sd"]),files[0])
-            p=os.path.join(BROLL_DIR,f"broll_{story_id}_{i}.mp4")
-            resp=requests.get(chosen["link"],stream=True,timeout=30)
-            with open(p,"wb") as f:
-                for chunk in resp.iter_content(8192): f.write(chunk)
-            log.info(f"  Clip {i+1} saved ({os.path.getsize(p)//1024}KB)"); clips.append(p)
-        except Exception as e: log.error(f"  Clip {i+1} failed: {e}")
+            ext = ".png" if img_url.lower().endswith(".png") else ".jpg"
+            tmp_img = os.path.join(BROLL_DIR, f"img_{story_id}_{i}{ext}")
+            r = requests.get(img_url, timeout=15)
+            if r.status_code != 200:
+                log.warning(f"  Image {i+1} download failed: {r.status_code}")
+                continue
+            open(tmp_img, "wb").write(r.content)
+            p = os.path.join(BROLL_DIR, f"broll_{story_id}_{i}.mp4")
+            cmd = ["ffmpeg", "-y", "-loop", "1", "-i", tmp_img,
+                   "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920",
+                   "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                   "-t", "15", "-pix_fmt", "yuv420p", "-r", "25", p]
+            result = subprocess.run(cmd, capture_output=True, timeout=60)
+            os.remove(tmp_img)
+            if result.returncode == 0:
+                log.info(f"  Clip {i+1} ready ({os.path.getsize(p)//1024}KB)")
+                clips.append(p)
+            else:
+                log.error(f"  Clip {i+1} ffmpeg failed: {result.stderr[-100:]}")
+        except Exception as e:
+            log.error(f"  Clip {i+1} failed: {e}")
     return clips
 def get_dur(p):
     r=subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1",p],capture_output=True,text=True)
