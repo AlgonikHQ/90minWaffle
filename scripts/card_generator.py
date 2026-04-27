@@ -32,15 +32,13 @@ COLOUR_MAP     = {"F1":0x00FF87,"F2":0xE63946,"F3":0x4361EE,"F4":0xF77F00,"F5":0
 def get_db(): return sqlite3.connect(DB_PATH)
 
 def build_discord_card(story):
-    fmt=story["format"]; score=story["score"]
+    fmt=story["format"]
     hook=story.get("winning_hook") or story["title"]
     caption=story.get("caption") or ""
     hashtags=" ".join(w for w in caption.split() if w.startswith("#"))
-    filled=int((score/100)*10)
-    bar="█"*filled+"░"*(10-filled)
     description=f"**{hook}**"
     if hashtags: description+=f"\n\n{hashtags}"
-    embed={"author":{"name":f"{FORMAT_EMOJI.get(fmt,'🔥')}  {FORMAT_LABEL.get(fmt,'HOT TAKE')}"},"title":story["title"][:256],"description":description[:2048],"color":COLOUR_MAP.get(fmt,0xE63946),"fields":[{"name":"Source","value":story.get("source",""),"inline":True},{"name":"Score","value":f"`{bar}` {score}/100","inline":True}],"footer":{"text":"90minWaffle • Football. Hot takes. No filter."},"timestamp":datetime.now(timezone.utc).isoformat()}
+    embed={"author":{"name":f"{FORMAT_EMOJI.get(fmt,'🔥')}  {FORMAT_LABEL.get(fmt,'HOT TAKE')}"},"title":story["title"][:256],"description":description[:2048],"color":COLOUR_MAP.get(fmt,0xE63946),"fields":[{"name":"Source","value":story.get("source",""),"inline":True}],"footer":{"text":"90minWaffle • Football. Hot takes. No filter."},"timestamp":datetime.now(timezone.utc).isoformat()}
     if story.get("url"): embed["url"]=story["url"]
     return embed
 
@@ -48,10 +46,36 @@ def build_telegram_card(story):
     fmt=story["format"]
     hook=story.get("winning_hook") or story["title"]
     caption=story.get("caption") or ""
-    return f"{FORMAT_EMOJI.get(fmt,'🔥')} {FORMAT_LABEL.get(fmt,'HOT TAKE')}\n\n{hook}\n\n{caption}\n\n— {story.get('source','')}\n\n#90minWaffle"
+    source=story.get("source","")
+    body_lines=[l for l in caption.split("\n") if not l.strip().startswith("#")]
+    hashtags=" ".join(w for w in caption.split() if w.startswith("#"))
+    body=" ".join(body_lines).strip()
+    lines=[f"{FORMAT_EMOJI.get(fmt,'🔥')} *{FORMAT_LABEL.get(fmt,'HOT TAKE')}*","",f"*{hook}*"]
+    if body: lines+=["",body]
+    lines+=["",f"— {source}"]
+    if hashtags: lines+=["",hashtags]
+    lines+=["","━━━━━━━━━━━━━━━━━━━━","🐦 @90minWaffle on X | 📺 YouTube | 🎵 TikTok"]
+    return "\n".join(lines)
+
+def build_telegram_buttons(story):
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    buttons=[]
+    if story.get("url"):
+        buttons.append(InlineKeyboardButton("🔗 Read More", url=story["url"]))
+    buttons.append(InlineKeyboardButton("🐦 @90minWaffle", url="https://twitter.com/90minwaffle"))
+    buttons.append(InlineKeyboardButton("📺 YouTube", url="https://youtube.com/@90minwaffle"))
+    buttons.append(InlineKeyboardButton("🎵 TikTok", url="https://tiktok.com/@90minwaffle"))
+    # Row 1: Read More (full width if present), Row 2: socials
+    keyboard=[]
+    if story.get("url"):
+        keyboard.append([buttons[0]])
+        keyboard.append(buttons[1:])
+    else:
+        keyboard.append(buttons)
+    return InlineKeyboardMarkup(keyboard)
 
 def post_discord_card(story):
-    channel_key="championship" if story.get("source") in ("BBC Championship","Football365") else FORMAT_DISCORD.get(story["format"],"general")
+    t = (story.get("title") or "").lower(); src = story.get("source") or ""; comp = story.get("competition") or ""; is_chip = (src in ("BBC Championship","Football365")) or (comp == "ELC") or any(k in t for k in ["championship","middlesbrough","sheffield","norwich","watford","preston","stoke","cardiff","swansea","west brom","hull city","bristol city","coventry","plymouth","blackburn","ipswich","queens park","luton","derby"]); channel_key = "championship" if is_chip else FORMAT_DISCORD.get(story["format"],"general")
     webhook=WEBHOOKS.get(channel_key)
     if not webhook: return False
     try:
@@ -64,7 +88,9 @@ async def post_telegram_card(story):
     if not NEWS_CHANNEL: return False
     try:
         bot=Bot(token=BOT_TOKEN)
-        await bot.send_message(chat_id=NEWS_CHANNEL,text=build_telegram_card(story),parse_mode=None)
+        text=build_telegram_card(story)
+        markup=build_telegram_buttons(story)
+        await bot.send_message(chat_id=NEWS_CHANNEL,text=text,parse_mode="Markdown",reply_markup=markup)
         log.info(f"  Telegram: {story['title'][:60]}"); return True
     except Exception as e: log.error(f"  Telegram failed: {e}"); return False
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import asyncio, sqlite3, logging, os
-from telegram import Bot
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from datetime import datetime, timezone
 from dotenv import load_dotenv
@@ -36,17 +36,35 @@ def build_news_message(story):
     return f"{emoji} *{hook}*\n\n{caption}\n\n— {source}"
 
 # ── News channel (public) ─────────────────────────────────────────────────────
+def build_news_buttons(story):
+    buttons=[]
+    if story.get("url"):
+        buttons.append(InlineKeyboardButton("🔗 Read More", url=story["url"]))
+    buttons.append(InlineKeyboardButton("🐦 @90minWaffle", url="https://twitter.com/90minwaffle"))
+    buttons.append(InlineKeyboardButton("📺 YouTube", url="https://youtube.com/@90minwaffle"))
+    buttons.append(InlineKeyboardButton("🎵 TikTok", url="https://tiktok.com/@90minwaffle"))
+    keyboard=[]
+    if story.get("url"):
+        keyboard.append([buttons[0]])
+        keyboard.append(buttons[1:])
+    else:
+        keyboard.append(buttons)
+    return InlineKeyboardMarkup(keyboard)
+
 async def post_to_news(story):
     bot = Bot(token=BOT_TOKEN)
     video_path = story.get("video_path")
     msg = build_news_message(story)
+    markup = build_news_buttons(story)
     try:
         if video_path and os.path.exists(video_path):
             with open(video_path, "rb") as vf:
                 await bot.send_video(chat_id=NEWS_CHANNEL, video=vf,
-                    caption=msg, parse_mode=ParseMode.MARKDOWN, supports_streaming=True)
+                    caption=msg, parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=markup, supports_streaming=True)
         else:
-            await bot.send_message(chat_id=NEWS_CHANNEL, text=msg, parse_mode=ParseMode.MARKDOWN)
+            await bot.send_message(chat_id=NEWS_CHANNEL, text=msg,
+                parse_mode=ParseMode.MARKDOWN, reply_markup=markup)
         log.info(f"  Posted to News: {story['title'][:60]}")
         return True
     except Exception as e:
@@ -55,8 +73,8 @@ async def post_to_news(story):
 
 async def process_news_queue(limit=3):
     conn = get_db(); c = conn.cursor()
-    c.execute("""SELECT id, title, source, score, format, winning_hook, caption, video_path
-        FROM stories WHERE status='queued' AND video_path IS NOT NULL
+    c.execute("""SELECT id, title, url, source, score, format, winning_hook, caption, video_path
+        FROM stories WHERE status='queued'
         AND format IN ('F1','F2','F5','F7')
         ORDER BY score DESC LIMIT ?""", (limit,))
     rows = c.fetchall(); conn.close()
@@ -64,8 +82,8 @@ async def process_news_queue(limit=3):
     log.info(f"=== Posting {len(rows)} to News channel ===")
     posted = 0
     for r in rows:
-        story = {"id":r[0],"title":r[1],"source":r[2],"score":r[3],"format":r[4],
-                 "winning_hook":r[5],"caption":r[6],"video_path":r[7]}
+        story = {"id":r[0],"title":r[1],"url":r[2],"source":r[3],"score":r[4],"format":r[5],
+                 "winning_hook":r[6],"caption":r[7],"video_path":r[8]}
         if await post_to_news(story):
             conn = get_db(); c = conn.cursor()
             c.execute("UPDATE stories SET status='published' WHERE id=?", (story["id"],))

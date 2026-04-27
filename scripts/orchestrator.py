@@ -88,31 +88,73 @@ def step_script(limit=3):
         log.error(f"  Script generation failed: {e}")
         return 0
 
-def step_video(limit=2):
+DAILY_VIDEO_CAP = 3
+VIDEO_SCORE_GATE = 75
+MIN_ELEVEN_CHARS = 500
+
+def videos_produced_today():
+    """Count videos already produced today (UTC date)."""
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        c.execute("""
+            SELECT COUNT(*) FROM stories
+            WHERE video_path IS NOT NULL
+            AND date(updated_at) = ?
+        """, (today,))
+        count = c.fetchone()[0]
+        conn.close()
+        return count
+    except Exception:
+        return 0
+
+def step_video(limit=1):
     log.info("━━━ STEP 5: Video Production ━━━")
     try:
         va = import_module("video_assembler", "/root/90minwaffle/scripts/video_assembler.py")
+
+        # Daily cap check
+        today_count = videos_produced_today()
+        if today_count >= DAILY_VIDEO_CAP:
+            log.info(f"  Daily video cap reached ({today_count}/{DAILY_VIDEO_CAP}) — skipping, cards will post instead")
+            return 0
+
+        # ElevenLabs quota check
+        remaining_chars = va.check_eleven_quota()
+        if remaining_chars < MIN_ELEVEN_CHARS:
+            log.warning(f"  ElevenLabs quota too low ({remaining_chars} chars) — skipping video, cards will post instead")
+            return 0
+
+        slots = DAILY_VIDEO_CAP - today_count
+        effective_limit = min(limit, slots)
 
         conn = get_db()
         c = conn.cursor()
         c.execute("""
             SELECT id, title, source, score, format, script
             FROM stories WHERE status='scripted'
+            AND score >= ?
             ORDER BY score DESC LIMIT ?
-        """, (limit,))
+        """, (VIDEO_SCORE_GATE, effective_limit))
         rows = c.fetchall()
         conn.close()
 
         stories = [{"id":r[0],"title":r[1],"source":r[2],
                     "score":r[3],"format":r[4],"script":r[5]} for r in rows]
 
+        if not stories:
+            log.info(f"  No stories meet video gate (score≥{VIDEO_SCORE_GATE}) — cards will post instead")
+            return 0
+
         produced = 0
         for story in stories:
+            log.info(f"  Video candidate: [{story['score']}] {story['title'][:60]}")
             result = va.produce_video(story)
             if result:
                 produced += 1
 
-        log.info(f"  Videos produced: {produced}/{len(stories)}")
+        log.info(f"  Videos produced: {produced}/{len(stories)} | Today total: {today_count + produced}/{DAILY_VIDEO_CAP}")
         return produced
     except Exception as e:
         log.error(f"  Video production failed: {e}")
@@ -154,6 +196,17 @@ def step_match_intel():
         log.info("  Match Intel done")
     except Exception as e:
         log.error(f"  Match Intel failed: {e}")
+
+def step_data_refresh():
+    log.info("━━━ STEP 0: Data Refresh ━━━")
+    try:
+        df = import_module("data_fetcher", "/root/90minwaffle/scripts/data_fetcher.py")
+        success = df.refresh_all()
+        log.info(f"  Data refresh — {success}/9 caches updated")
+        return success
+    except Exception as e:
+        log.error(f"  Data refresh failed: {e}")
+        return 0
 
 def step_discord():
     log.info("━━━ STEP 7: Discord Posting ━━━")
@@ -217,6 +270,7 @@ async def run_cycle(script_limit=2, video_limit=2):
     log.info(f"90minWaffle Cycle — {start.strftime('%Y-%m-%d %H:%M UTC')}")
     log.info(f"{'='*50}")
 
+    step_data_refresh()
     new_stories  = step_poll()
     shippable    = step_score()
     shippable   += step_corroborate()
@@ -260,7 +314,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true", help="Run one cycle and exit")
     parser.add_argument("--loop", action="store_true", help="Run continuously")
-    parser.add_argument("--interval", type=int, default=120, help="Loop interval in minutes")
+    parser.add_argument("--interval", type=int, default=60, help="Loop interval in minutes")
     parser.add_argument("--scripts", type=int, default=3, help="Max scripts per cycle")
     parser.add_argument("--videos", type=int, default=2, help="Max videos per cycle")
     args = parser.parse_args()

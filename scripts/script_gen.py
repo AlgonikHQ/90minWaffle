@@ -35,18 +35,30 @@ FORMAT_NAMES = {
     "F7": "Hot Take",
 }
 
+
+from stat_engine import build_verified_stats_block
 SYSTEM_PROMPT = """You are the script writer for 90minWaffle, a UK football short-form video brand.
 
-VOICE: Hot-take merchant. Loud, opinionated, divisive. UK football vocabulary: 'bottled it', 'cooked', 'doing a Spurs', 'Pep masterclass'. Short, punchy sentences.
+VOICE: Hot-take merchant. Loud, opinionated, divisive but fair. UK football vocabulary: bottled it, cooked, doing a Spurs, Pep masterclass, the lads, going down. Punchy stat-led sentences. Banter not beef. Wind up, never attack.
+
+STRUCTURE — every script follows this shape:
+1. STAT or FACT — open with a verified number, date, or record from the VERIFIED_STATS block below
+2. BANTER — punchy take or skull-emoji-worthy observation, UK football voice
+3. ENGAGEMENT QUESTION — end with a binary or open question to drive replies
+
+ACCURACY RULES — non-negotiable:
+- Every stat in the script must come from the VERIFIED_STATS block in the user prompt. No invented numbers, dates, or records.
+- If a fact is not in VERIFIED_STATS, do not state it. Rephrase around what is verified.
+- No conflated facts (e.g. wrong cup, wrong year, wrong opponent). When in doubt, leave it out.
 
 HARD RULES — never break these:
-- Never attack individual players' character, mental health, families or personal lives
+- Never attack individual players character, mental health, families or personal lives
 - Never reference race, religion, nationality in a negative way
 - Never attack specific fans or fan groups
 - Never attack referees as people (decisions yes, person no)
-- Never use: 'Did you know', 'Let's dive into', 'Hey football fans', 'Hey guys', 'In this video', 'Like and subscribe'
+- No banned phrases: Did you know, Lets dive into, Hey football fans, Hey guys, In this video, Like and subscribe
 - No intro. First word is the hook. Hard cut straight into content.
-- Sign-off: state the answer to the video's setup → pivot to a binary question. NEVER 'follow for more'.
+- Sign-off: state the answer to the setup, then pivot to a binary question. NEVER follow for more.
 
 OUTPUT FORMAT: Respond only in valid JSON, no markdown, no preamble.
 {
@@ -74,18 +86,37 @@ def build_prompt(story, fmt):
     elif sometimes:
         contrarian_instruction = "Generate both angles. Pick the stronger one as winning_script."
     else:
-        contrarian_instruction = "Contrarian angle not required. Set winning_script to 'mainstream'."
+        contrarian_instruction = "Contrarian angle not required. Set winning_script to mainstream."
 
+    title_lower = story["title"].lower()
+    detected_team = None
+    pl_teams = ["arsenal", "manchester city", "manchester united", "liverpool", "chelsea",
+                "tottenham", "newcastle", "aston villa", "brighton", "west ham",
+                "crystal palace", "fulham", "brentford", "everton", "wolves",
+                "nottingham forest", "bournemouth", "sunderland", "leeds", "burnley"]
+    for t in pl_teams:
+        if t in title_lower:
+            detected_team = t; break
+
+    verified_stats = build_verified_stats_block(team_name=detected_team, comp="PL")
     return f"""Generate a 90minWaffle video script for this story:
 
-HEADLINE: {story['title']}
-SOURCE: {story['source']} (Tier {story['source_tier']})
+VERIFIED_STATS (use only these for any numbers/dates/records):
+{verified_stats}
+
+HEADLINE: {story["title"]}
+SOURCE: {story["source"]} (Tier {story["source_tier"]})
 FORMAT: {fmt} — {format_name}
-TARGET LENGTH: ~{length} seconds of spoken word (~{length * 2} words)
-SCORE: {story['score']}/100
+TARGET LENGTH: ~{length} seconds spoken (~{length * 2} words)
+SCORE: {story["score"]}/100
+
+{contrarian_instruction}
+
 Generate 3 hook variants. Pick the highest scoring one as winning_hook.
-Scripts must end with: state the answer -> binary question CTA.
-IMPORTANT: Your entire response must be a single valid JSON object. No markdown, no explanation, no preamble. Start your response with {{ and end with }}."""
+Each hook must lead with a verified stat from VERIFIED_STATS above.
+Scripts end with: state the answer, then a binary question CTA.
+IMPORTANT: Your entire response must be a single valid JSON object. No markdown, no explanation, no preamble. Start with {{ and end with }}."""
+
 
 
 def get_db():

@@ -74,7 +74,6 @@ def build_embed(story):
     caption = story.get("caption", "")
     emoji = FORMAT_EMOJI.get(fmt, "🔥")
     label = FORMAT_LABEL.get(fmt, "HOT TAKE")
-    stars = "⭐" * min(5, max(1, score // 20))
 
     description = f"**{hook}**"
     if caption:
@@ -88,7 +87,6 @@ def build_embed(story):
         "color": COLOUR_MAP.get(fmt, 0xE63946),
         "fields": [
             {"name": "Source", "value": story.get("source", "Unknown"), "inline": True},
-            {"name": "Score", "value": f"{stars} ({score}/100)", "inline": True},
         ],
         "footer": {"text": "90minWaffle • Football. Hot takes. No filter."},
         "timestamp": datetime.now(timezone.utc).isoformat()
