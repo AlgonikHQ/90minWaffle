@@ -184,15 +184,41 @@ def _rss_media(story: dict) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 def _sportsdb(title: str, hook: str) -> Optional[str]:
-    """Delegate to the existing sportsdb facade."""
+    """Load sportsdb_registry directly to avoid import path issues."""
     try:
         import importlib.util, sys
+        sys.path.insert(0, "/root/90minwaffle/scripts")
         spec = importlib.util.spec_from_file_location(
-            "sportsdb", "/root/90minwaffle/scripts/sportsdb.py"
+            "sportsdb_registry", "/root/90minwaffle/scripts/sportsdb_registry.py"
         )
-        m = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(m)
-        return m.get_image_for_story(title, hook)
+        reg = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(reg)
+        text = f"{title} {hook}"
+        # Try player image first
+        team    = reg.find_team_in_text(text)
+        team_id = team.get("id") if team else None
+        names   = reg.extract_player_names(text)
+        for name in names[:3]:
+            url = reg.find_player_image(name, team_id)
+            if url:
+                log.debug(f"  [image_resolver] Player image: {name}")
+                return url
+        # Fall back to team image
+        if team:
+            url = reg.best_team_image(team)
+            if url:
+                log.debug(f"  [image_resolver] Team image: {team.get('name','')}")
+                return url
+        # Last resort — legacy player search (football only)
+        import requests as _req
+        for name in names[:2]:
+            r = _req.get(f"{reg.BASE}/searchplayers.php", params={"p": name}, timeout=8)
+            players = (r.json() or {}).get("player") or []
+            for p in players:
+                if (p.get("strSport") or "").lower() in ("soccer", "football"):
+                    url = p.get("strRender") or p.get("strCutout") or p.get("strThumb")
+                    if url: return url
+        return None
     except Exception as e:
         log.debug(f"  [image_resolver] SportsDB failed: {e}")
         return None
