@@ -67,16 +67,17 @@ def get_sportsdb_images(story):
             if len(images) >= 2:
                 break
 
-        # 3. Fill with team images
+        # 3. Fill with team images — fanart/stadium first, badge last
         if team:
-            for key in ["fanart","banner","stadium_thumb","badge","logo"]:
+            for key in ["fanart","banner","stadium_thumb","equipment","badge","logo"]:
                 if len(images) >= 4: break
                 url = team.get(key)
                 if url and url not in images:
                     images.append(url)
 
-        # 4. Legacy player search — football ONLY, filter other sports
+        # 4. Legacy player search — football ONLY, correct gender
         if not images and names:
+            story_is_women = is_womens_story(title)
             for name in names[:2]:
                 try:
                     r = requests.get(
@@ -87,6 +88,10 @@ def get_sportsdb_images(story):
                     for p in players:
                         sport = (p.get("strSport") or "").lower()
                         if sport not in ("soccer", "football"):
+                            continue
+                        # Gender check — only use women players for womens stories
+                        gender = (p.get("strGender") or "Male").lower()
+                        if not story_is_women and gender == "female":
                             continue
                         url = p.get("strRender") or p.get("strCutout") or p.get("strThumb")
                         if url and url not in images:
@@ -162,24 +167,33 @@ def is_womens_story(title):
     return any(k in t for k in WOMEN_KEYWORDS)
 
 def fetch_pexels_images(title, fmt):
-    """Fallback image search via Pexels when SportsDB returns nothing."""
+    """Fallback image search via Pexels — men's or women's based on story content."""
     if not PEXELS_KEY: return []
     t = title.lower()
-    # Context-aware queries
-    if any(k in t for k in ["manager","boss","appointed","sacked","head coach","assistant"]):
-        query = "soccer manager dugout touchline coaching"
+    is_women = is_womens_story(title)
+    gender = "women's" if is_women else "men's"
+
+    # Use BROLL_QUERIES dicts for consistent gender-correct queries
+    queries = BROLL_QUERIES_WOMEN if is_women else BROLL_QUERIES
+    fmt_queries = queries.get(fmt, [])
+
+    # Context-aware override for specific story types
+    if any(k in t for k in ["manager","boss","appointed","sacked","head coach"]):
+        query = f"{'women' if is_women else 'men'} soccer manager dugout touchline"
     elif any(k in t for k in ["transfer","signing","deal","bid","fee","contract"]):
-        query = "soccer football transfer signing press conference"
+        query = f"{'women' if is_women else 'men'} soccer football transfer signing"
+    elif any(k in t for k in ["stadium","wembley","anfield","emirates","bernabeu","nou camp","etihad"]):
+        query = "soccer football stadium crowd atmosphere night"
     elif any(k in t for k in ["preview","vs","v ","facing","ahead of"]):
-        query = "soccer football stadium atmosphere crowd night"
+        query = fmt_queries[2] if len(fmt_queries) > 2 else f"{'women' if is_women else 'men'} soccer stadium night"
     elif any(k in t for k in ["reaction","win","loss","defeat","goal","scored"]):
-        query = "soccer football goal celebration players"
-    elif fmt == "F5":
-        query = "soccer premier league trophy champions celebration"
-    elif fmt == "F7":
-        query = "soccer football fans stadium debate"
+        query = fmt_queries[0] if fmt_queries else f"{'women' if is_women else 'men'} soccer goal celebration"
+    elif fmt_queries:
+        query = fmt_queries[0]
     else:
-        query = "soccer football premier league match action"
+        query = f"{'women' if is_women else 'men'} soccer football premier league match action"
+
+    log.info(f"  Pexels query ({gender}): {query}")
     try:
         r = requests.get("https://api.pexels.com/videos/search",
             headers={"Authorization": PEXELS_KEY},
