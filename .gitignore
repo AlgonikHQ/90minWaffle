@@ -24,3 +24,4 @@ data/broll/
 
 # DB
 *.db
+backups/
