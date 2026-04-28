@@ -102,7 +102,7 @@ def get_dynamic_video_cap():
         days_left = max(1, (datetime.fromtimestamp(reset_ts, tz=timezone.utc) - datetime.now(timezone.utc)).days)
         chars_per_video = 850
         affordable = int(remaining / chars_per_video)
-        daily_cap = max(0, min(3, affordable // days_left))
+        daily_cap = 1 if affordable >= days_left else 0
         log.info(f"  ElevenLabs quota: {remaining} chars | {days_left} days left | affordable: {affordable} videos | daily cap: {daily_cap}")
         return daily_cap
     except Exception as e:
@@ -110,7 +110,7 @@ def get_dynamic_video_cap():
         return 1
 
 DAILY_VIDEO_CAP = 3
-VIDEO_SCORE_GATE = 75
+VIDEO_SCORE_GATE = 55
 MIN_ELEVEN_CHARS = 500
 
 def videos_produced_today():
@@ -403,16 +403,98 @@ async def run_cycle(script_limit=2, video_limit=2, force_digest=False, force_pod
     await send_cycle_report(new_stories, shippable, scripted, produced, queued)
     return queued
 
-async def run_loop(interval_minutes=120):
-    """Run continuously every interval_minutes."""
-    log.info(f"90minWaffle Bot starting — cycle every {interval_minutes} minutes")
+async def run_loop(interval_minutes=10):
+    """Run continuously - poll every 10 mins, fire cards as they arrive."""
+    POST_SPACING_SECONDS = 240
+    HEAVY_STEPS_INTERVAL = 6
+    log.info("90minWaffle Bot starting - live feed mode, polling every %d minutes" % interval_minutes)
+    cycle_count = 0
+
     while True:
+        cycle_count += 1
+        run_heavy = (cycle_count % HEAVY_STEPS_INTERVAL == 1)
         try:
-            await run_cycle()
+            start = datetime.now(timezone.utc)
+            log.info("=" * 50)
+            log.info("90minWaffle Cycle #%d - %s | heavy=%s" % (cycle_count, start.strftime("%Y-%m-%d %H:%M UTC"), run_heavy))
+            log.info("=" * 50)
+
+            if run_heavy:
+                step_data_refresh()
+            new_stories = step_poll()
+            shippable   = step_score()
+            shippable  += step_corroborate()
+
+            if shippable > 0:
+                log.info("  %d new shippable - firing cards with %ds spacing" % (shippable, POST_SPACING_SECONDS))
+                cg = import_module("card_generator", "/root/90minwaffle/scripts/card_generator.py")
+                for _ in range(min(shippable, 5)):
+                    await cg.process_cards(limit=1)
+                    await asyncio.sleep(POST_SPACING_SECONDS)
+            else:
+                log.info("  No new shippable stories this cycle - nothing to post")
+
+            scripted = produced = queued = 0
+            if run_heavy:
+                scripted = step_script(limit=3)
+                produced = step_video(limit=2)
+                await step_overlay()
+                queued   = await step_queue()
+                step_discord()
+                await step_telegram()
+                await step_youtube()
+                step_match_intel()
+                step_bet_alerts()
+
+            now_hour = datetime.now(timezone.utc).hour
+            if now_hour == 8:
+                step_digest()
+            if datetime.now(timezone.utc).weekday() == 6 and now_hour == 9:
+                await step_podcast()
+            if now_hour == 2:
+                log.info("Daily Cleanup")
+                import_module("cleanup", "/root/90minwaffle/scripts/cleanup.py").cleanup()
+            if now_hour == 0:
+                log.info("Midnight Summary")
+                try:
+                    tp = import_module("telegram_poster", "/root/90minwaffle/scripts/telegram_poster.py")
+                    conn = get_db()
+                    c = conn.cursor()
+                    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                    c.execute("SELECT COUNT(*) FROM stories WHERE date(created_at) = ?", (today,))
+                    s = c.fetchone()[0]
+                    c.execute("SELECT COUNT(*) FROM stories WHERE status='shippable' AND date(created_at) = ?", (today,))
+                    sh = c.fetchone()[0]
+                    c.execute("SELECT COUNT(*) FROM stories WHERE video_path IS NOT NULL AND date(updated_at) = ?", (today,))
+                    v = c.fetchone()[0]
+                    c.execute("SELECT COUNT(*) FROM stories WHERE status='published' AND date(updated_at) = ?", (today,))
+                    p = c.fetchone()[0]
+                    conn.close()
+                    await tp.send_midnight_summary({"stories": s, "shippable": sh, "videos": v, "posted": p})
+                except Exception as e:
+                    log.error("Midnight summary failed: %s" % e)
+
+            try:
+                va = import_module("video_assembler", "/root/90minwaffle/scripts/video_assembler.py")
+                tp = import_module("telegram_poster", "/root/90minwaffle/scripts/telegram_poster.py")
+                remaining = va.check_eleven_quota()
+                if 0 < remaining < 1000:
+                    await tp.send_quota_alert(remaining, 10000)
+            except Exception as e:
+                log.error("Quota check failed: %s" % e)
+
+            elapsed = (datetime.now(timezone.utc) - start).seconds
+            log.info("Cycle #%d done in %ds | new=%d ship=%d scripts=%d videos=%d" % (
+                cycle_count, elapsed, new_stories, shippable, scripted, produced))
+            if run_heavy:
+                await send_cycle_report(new_stories, shippable, scripted, produced, queued)
+
         except Exception as e:
-            log.error(f"Cycle error: {e}")
-        log.info(f"Sleeping {interval_minutes} minutes until next cycle...")
+            log.error("Cycle #%d error: %s" % (cycle_count, e))
+
+        log.info("Sleeping %d minutes until next cycle..." % interval_minutes)
         await asyncio.sleep(interval_minutes * 60)
+
 
 if __name__ == "__main__":
     import argparse

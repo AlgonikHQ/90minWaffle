@@ -28,8 +28,9 @@ def check_eleven_quota():
                          headers={"xi-api-key": ELEVEN_KEY}, timeout=10)
         if r.status_code == 200:
             data = r.json()
-            used = data.get("character_count", 0)
-            limit = data.get("character_limit", 10000)
+            sub = data.get("subscription", data)
+            used = sub.get("character_count", data.get("character_count", 0))
+            limit = sub.get("character_limit", data.get("character_limit", 30000))
             remaining = limit - used
             log.info(f"  ElevenLabs quota: {remaining} chars remaining ({used}/{limit})")
             return remaining

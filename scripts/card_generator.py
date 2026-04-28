@@ -51,13 +51,13 @@ def build_discord_card(story):
     if hashtags: description+=f"\n\n{hashtags}"
     embed={"author":{"name":f"{FORMAT_EMOJI.get(fmt,'🔥')}  {FORMAT_LABEL.get(fmt,'HOT TAKE')}"},"title":story["title"][:256],"description":description[:2048],"color":COLOUR_MAP.get(fmt,0xE63946),"fields":[{"name":"Source","value":story.get("source",""),"inline":True}],"footer":{"text":"90minWaffle • Football. Hot takes. No filter."},"timestamp":datetime.now(timezone.utc).isoformat()}
     if story.get("url"): embed["url"]=story["url"]
-    # SportsDB image
+    # Image — 4-layer waterfall (OG scrape > RSS media > SportsDB > badge)
     try:
-        sdb = _get_sportsdb()
-        img_url = sdb.get_image_for_story(story.get("title",""), story.get("winning_hook",""))
+        from image_resolver import resolve_image
+        img_url = resolve_image(story)
         if img_url: embed["image"] = {"url": img_url}
     except Exception as e:
-        log.warning("SportsDB image failed: " + str(e))
+        log.warning("Discord image failed: " + str(e))
     return embed
 
 def build_telegram_card(story):
@@ -108,13 +108,13 @@ async def post_telegram_card(story):
         bot=Bot(token=BOT_TOKEN)
         text=build_telegram_card(story)
         markup=build_telegram_buttons(story)
-        # Try to get SportsDB image for photo post
+        # Try to get best image — 4-layer waterfall
         img_url = None
         try:
-            sdb = _get_sportsdb()
-            img_url = sdb.get_image_for_story(story.get("title",""), story.get("winning_hook",""))
+            from image_resolver import resolve_image
+            img_url = resolve_image(story)
         except Exception as e:
-            log.warning("SportsDB Telegram image failed: " + str(e))
+            log.warning("Telegram image failed: " + str(e))
         if img_url:
             await bot.send_photo(chat_id=NEWS_CHANNEL, photo=img_url,
                 caption=text, parse_mode="Markdown", reply_markup=markup)
