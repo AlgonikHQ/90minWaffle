@@ -157,11 +157,6 @@ def build(groups, hook, cta, duration, fmt="F2", title=""):
     fmt_label = FORMAT_LABEL.get(fmt, "FOOTBALL NEWS")
     parts     = []
 
-    # ── DARK VIGNETTE (always on) ────────────────────────────────────────────
-    parts.append(f"drawbox=x=0:y=0:w={W}:h=350:color=black@0.55:t=fill")
-    parts.append(f"drawbox=x=0:y=1550:w={W}:h=370:color=black@0.60:t=fill")
-    parts.append(f"drawbox=x=0:y=820:w={W}:h=180:color=black@0.38:t=fill")
-
     # ── TOP BAR ──────────────────────────────────────────────────────────────
     parts.append(f"drawbox=x=0:y=0:w={W}:h=90:color=black@0.90:t=fill")
     parts.append(f"drawbox=x=0:y=87:w={W}:h=3:color={RED}:t=fill")
@@ -197,14 +192,14 @@ def build(groups, hook, cta, duration, fmt="F2", title=""):
         parts.append(
             f"drawtext={f}text={line1}:fontsize=82:fontcolor={YELLOW}:"
             f"x=(1080-text_w)/2:y=800:"
-            f"shadowcolor=black:shadowx=6:shadowy=6:"
+            f"shadowcolor=black:shadowx=5:shadowy=5:"
             f"enable={bt(0, hook_end)}"
         )
     if line2:
         parts.append(
             f"drawtext={f}text={line2}:fontsize=82:fontcolor={YELLOW}:"
             f"x=(1080-text_w)/2:y=892:"
-            f"shadowcolor=black:shadowx=6:shadowy=6:"
+            f"shadowcolor=black:shadowx=5:shadowy=5:"
             f"enable={bt(0, hook_end)}"
         )
 
@@ -234,18 +229,11 @@ def build(groups, hook, cta, duration, fmt="F2", title=""):
         )
         # Caption text
         parts.append(
-            f"drawtext={f}text={txt}:fontsize=88:fontcolor={WHITE}:"
+            f"drawtext={f}text={txt}:fontsize=78:fontcolor={WHITE}:"
             f"x=(1080-text_w)/2:y=888:"
             f"shadowcolor=black:shadowx=3:shadowy=3:"
             f"enable={bt(t0, t1)}"
         )
-
-    # ── PERSISTENT WATERMARK ─────────────────────────────────────────────────
-    parts.append(
-        f"drawtext={f}text=90minWaffle:fontsize=22:fontcolor={WHITE}@0.30:"
-        f"x={W}-text_w-18:y=950:"
-        f"shadowcolor=black:shadowx=1:shadowy=1"
-    )
 
     # ── BOTTOM BAR ───────────────────────────────────────────────────────────
     parts.append(

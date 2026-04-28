@@ -40,61 +40,27 @@ def check_eleven_quota():
         return 0
 
 def get_sportsdb_images(story):
-    """Get SportsDB images — player photos first, team badge/fanart fallback.
-    Strictly football/soccer only — no crossover sports."""
+    """Get SportsDB images to use as video backgrounds instead of Pexels."""
     try:
-        import sys, importlib.util
-        sys.path.insert(0, "/root/90minwaffle/scripts")
-        spec = importlib.util.spec_from_file_location("sportsdb_registry", "/root/90minwaffle/scripts/sportsdb_registry.py")
-        reg = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(reg)
-        title = story.get("title", "") or ""
-        hook  = story.get("winning_hook", "") or ""
-        text  = f"{title} {hook}"
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("sportsdb", "/root/90minwaffle/scripts/sportsdb.py")
+        sdb = importlib.util.module_from_spec(spec); spec.loader.exec_module(sdb)
+        title = story.get("title", "")
+        hook = story.get("winning_hook", "")
+        text = f"{title} {hook}"
         images = []
-
-        # 1. Find team context
-        team    = reg.find_team_in_text(text)
-        team_id = team.get("id") if team else None
-
-        # 2. Try player images from roster
-        names = reg.extract_player_names(text)
-        for name in names[:3]:
-            url = reg.find_player_image(name, team_id)
-            if url and url not in images:
-                images.append(url)
-            if len(images) >= 2:
-                break
-
-        # 3. Fill with team images
+        team = sdb.find_team_in_text(text)
+        team_id = team.get("idTeam") if team else None
+        player_names = sdb.extract_player_names(text)
+        for name in player_names[:2]:
+            url = sdb.find_player_image(name, team_id)
+            if url and url not in images: images.append(url)
+            if len(images) >= 2: break
         if team:
-            for key in ["fanart","banner","stadium_thumb","badge","logo"]:
+            for field in ["strTeamBadge","strTeamBanner","strTeamFanart1","strTeamFanart2","strTeamFanart3","strTeamFanart4"]:
                 if len(images) >= 4: break
-                url = team.get(key)
-                if url and url not in images:
-                    images.append(url)
-
-        # 4. Legacy player search — football ONLY, filter other sports
-        if not images and names:
-            for name in names[:2]:
-                try:
-                    r = requests.get(
-                        f"{reg.BASE}/searchplayers.php",
-                        params={"p": name}, timeout=10
-                    )
-                    players = (r.json() or {}).get("player") or []
-                    for p in players:
-                        sport = (p.get("strSport") or "").lower()
-                        if sport not in ("soccer", "football"):
-                            continue
-                        url = p.get("strRender") or p.get("strCutout") or p.get("strThumb")
-                        if url and url not in images:
-                            images.append(url)
-                            break
-                except Exception:
-                    pass
-
-        log.info(f"  SportsDB: {len(images)} images for: {title[:50]}")
+                url = team.get(field)
+                if url and url not in images: images.append(url)
         return images[:4]
     except Exception as e:
         log.warning("SportsDB video images failed: " + str(e))
@@ -166,19 +132,19 @@ def fetch_pexels_images(title, fmt):
     t = title.lower()
     # Context-aware queries
     if any(k in t for k in ["manager","boss","appointed","sacked","head coach","assistant"]):
-        query = "soccer manager dugout touchline coaching"
+        query = "football manager touchline dugout"
     elif any(k in t for k in ["transfer","signing","deal","bid","fee","contract"]):
-        query = "soccer football transfer signing press conference"
+        query = "football transfer signing"
     elif any(k in t for k in ["preview","vs","v ","facing","ahead of"]):
-        query = "soccer football stadium atmosphere crowd night"
+        query = "football stadium night atmosphere"
     elif any(k in t for k in ["reaction","win","loss","defeat","goal","scored"]):
-        query = "soccer football goal celebration players"
+        query = "football goal celebration crowd"
     elif fmt == "F5":
-        query = "soccer premier league trophy champions celebration"
+        query = "premier league trophy celebration"
     elif fmt == "F7":
-        query = "soccer football fans stadium debate"
+        query = "football fans arguing debate"
     else:
-        query = "soccer football premier league match action"
+        query = "premier league football action"
     try:
         r = requests.get("https://api.pexels.com/videos/search",
             headers={"Authorization": PEXELS_KEY},
@@ -223,10 +189,9 @@ def fetch_clips(fmt,story_id,n=4,title=""):
         try:
             is_video = any(url.lower().endswith(e) for e in [".mp4",".mov",".webm"]) or "videos/files" in url
             if is_video:
-                # Download Pexels video directly
+                # Download video directly
                 r = requests.get(url, timeout=30, stream=True)
-                if r.status_code != 200:
-                    log.warning(f"  Video {i+1} download failed: {r.status_code}"); continue
+                if r.status_code != 200: log.warning(f"  Video {i+1} download failed: {r.status_code}"); continue
                 tmp_v = os.path.join(BROLL_DIR, f"tmp_{story_id}_{i}.mp4")
                 with open(tmp_v, "wb") as f:
                     for chunk in r.iter_content(chunk_size=8192): f.write(chunk)
@@ -237,28 +202,17 @@ def fetch_clips(fmt,story_id,n=4,title=""):
                 result = subprocess.run(cmd, capture_output=True, timeout=90)
                 os.remove(tmp_v)
             else:
-                # Download SportsDB image and convert with blur background
+                # Download image and convert to video
                 ext = ".png" if url.lower().endswith(".png") else ".jpg"
                 tmp_img = os.path.join(BROLL_DIR, f"img_{story_id}_{i}{ext}")
                 r = requests.get(url, timeout=15)
-                if r.status_code != 200:
-                    log.warning(f"  Image {i+1} download failed: {r.status_code}"); continue
+                if r.status_code != 200: log.warning(f"  Image {i+1} download failed: {r.status_code}"); continue
                 open(tmp_img, "wb").write(r.content)
-                # Blurred background fill + sharp centred image + dark overlay
-                vf_img = (
-                    "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
-                    "crop=1080:1920,gblur=sigma=35,eq=brightness=-0.3[bg];"
-                    "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,"
-                    "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black@0[fg];"
-                    "[bg][fg]overlay=0:0,"
-                    "drawbox=x=0:y=0:w=1080:h=1920:color=black@0.35:t=fill,"
-                    "eq=contrast=1.05:saturation=1.1"
-                )
                 cmd = ["ffmpeg", "-y", "-loop", "1", "-i", tmp_img,
-                       "-filter_complex", vf_img,
-                       "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+                       "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920",
+                       "-c:v", "libx264", "-preset", "fast", "-crf", "23",
                        "-t", "15", "-pix_fmt", "yuv420p", "-r", "25", p]
-                result = subprocess.run(cmd, capture_output=True, timeout=120)
+                result = subprocess.run(cmd, capture_output=True, timeout=60)
                 os.remove(tmp_img)
             if result.returncode == 0:
                 log.info(f"  Clip {i+1} ready ({os.path.getsize(p)//1024}KB)")

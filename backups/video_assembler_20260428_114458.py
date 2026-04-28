@@ -223,10 +223,9 @@ def fetch_clips(fmt,story_id,n=4,title=""):
         try:
             is_video = any(url.lower().endswith(e) for e in [".mp4",".mov",".webm"]) or "videos/files" in url
             if is_video:
-                # Download Pexels video directly
+                # Download video directly
                 r = requests.get(url, timeout=30, stream=True)
-                if r.status_code != 200:
-                    log.warning(f"  Video {i+1} download failed: {r.status_code}"); continue
+                if r.status_code != 200: log.warning(f"  Video {i+1} download failed: {r.status_code}"); continue
                 tmp_v = os.path.join(BROLL_DIR, f"tmp_{story_id}_{i}.mp4")
                 with open(tmp_v, "wb") as f:
                     for chunk in r.iter_content(chunk_size=8192): f.write(chunk)
@@ -237,29 +236,27 @@ def fetch_clips(fmt,story_id,n=4,title=""):
                 result = subprocess.run(cmd, capture_output=True, timeout=90)
                 os.remove(tmp_v)
             else:
-                # Download SportsDB image and convert with blur background
+                # Download image and convert to video
                 ext = ".png" if url.lower().endswith(".png") else ".jpg"
                 tmp_img = os.path.join(BROLL_DIR, f"img_{story_id}_{i}{ext}")
                 r = requests.get(url, timeout=15)
-                if r.status_code != 200:
-                    log.warning(f"  Image {i+1} download failed: {r.status_code}"); continue
+                if r.status_code != 200: log.warning(f"  Image {i+1} download failed: {r.status_code}"); continue
                 open(tmp_img, "wb").write(r.content)
-                # Blurred background fill + sharp centred image + dark overlay
-                vf_img = (
-                    "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
-                    "crop=1080:1920,gblur=sigma=35,eq=brightness=-0.3[bg];"
-                    "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,"
-                    "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black@0[fg];"
-                    "[bg][fg]overlay=0:0,"
-                    "drawbox=x=0:y=0:w=1080:h=1920:color=black@0.35:t=fill,"
-                    "eq=contrast=1.05:saturation=1.1"
-                )
-                cmd = ["ffmpeg", "-y", "-loop", "1", "-i", tmp_img,
-                       "-filter_complex", vf_img,
-                       "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+                # Scale to fill 1080x1920 portrait properly
+            # For small images (badges/logos): scale up with blur background
+            # For wide images (banners/fanart): crop to portrait
+            vf = (
+                "scale=1080:1920:force_original_aspect_ratio=increase,"
+                "crop=1080:1920,"
+                "zoompan=z='min(zoom+0.0008,1.05)':d=375:s=1080x1920:fps=25,"
+                "eq=brightness=-0.08:contrast=1.08:saturation=1.1"
+            )
+            cmd = ["ffmpeg", "-y", "-loop", "1", "-i", tmp_img,
+                       "-vf", vf,
+                       "-c:v", "libx264", "-preset", "fast", "-crf", "23",
                        "-t", "15", "-pix_fmt", "yuv420p", "-r", "25", p]
-                result = subprocess.run(cmd, capture_output=True, timeout=120)
-                os.remove(tmp_img)
+            result = subprocess.run(cmd, capture_output=True, timeout=90)
+            os.remove(tmp_img)
             if result.returncode == 0:
                 log.info(f"  Clip {i+1} ready ({os.path.getsize(p)//1024}KB)")
                 clips.append(p)

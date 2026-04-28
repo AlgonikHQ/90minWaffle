@@ -164,7 +164,11 @@ def save_script(story_id, result):
     # Handle both response shapes:
     # Simple: {"winning_hook": "text", "script": "..."}
     # Dual-angle: {"winning_hook": "text", "mainstream_angle": "...", "contrarian_angle": "...", "winning_script": "mainstream|contrarian"}
-    winning_hook_text = result.get("winning_hook", "")
+    winning_hook_raw = result.get("winning_hook", "")
+    if winning_hook_raw in ("hook_1","hook_2","hook_3"):
+        winning_hook_text = result.get(winning_hook_raw, winning_hook_raw)
+    else:
+        winning_hook_text = winning_hook_raw
     if result.get("script"):
         winning_script = result.get("script", "")
     else:

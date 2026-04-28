@@ -24,7 +24,7 @@ def get_db(): return sqlite3.connect(DB_PATH)
 def check_eleven_quota():
     """Return remaining ElevenLabs characters, or 0 on error."""
     try:
-        r = requests.get("https://api.elevenlabs.io/v1/user",
+        r = requests.get("https://api.elevenlabs.io/v1/user/subscription",
                          headers={"xi-api-key": ELEVEN_KEY}, timeout=10)
         if r.status_code == 200:
             data = r.json()
@@ -40,61 +40,27 @@ def check_eleven_quota():
         return 0
 
 def get_sportsdb_images(story):
-    """Get SportsDB images — player photos first, team badge/fanart fallback.
-    Strictly football/soccer only — no crossover sports."""
+    """Get SportsDB images to use as video backgrounds instead of Pexels."""
     try:
-        import sys, importlib.util
-        sys.path.insert(0, "/root/90minwaffle/scripts")
-        spec = importlib.util.spec_from_file_location("sportsdb_registry", "/root/90minwaffle/scripts/sportsdb_registry.py")
-        reg = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(reg)
-        title = story.get("title", "") or ""
-        hook  = story.get("winning_hook", "") or ""
-        text  = f"{title} {hook}"
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("sportsdb", "/root/90minwaffle/scripts/sportsdb.py")
+        sdb = importlib.util.module_from_spec(spec); spec.loader.exec_module(sdb)
+        title = story.get("title", "")
+        hook = story.get("winning_hook", "")
+        text = f"{title} {hook}"
         images = []
-
-        # 1. Find team context
-        team    = reg.find_team_in_text(text)
-        team_id = team.get("id") if team else None
-
-        # 2. Try player images from roster
-        names = reg.extract_player_names(text)
-        for name in names[:3]:
-            url = reg.find_player_image(name, team_id)
-            if url and url not in images:
-                images.append(url)
-            if len(images) >= 2:
-                break
-
-        # 3. Fill with team images
+        team = sdb.find_team_in_text(text)
+        team_id = team.get("idTeam") if team else None
+        player_names = sdb.extract_player_names(text)
+        for name in player_names[:2]:
+            url = sdb.find_player_image(name, team_id)
+            if url and url not in images: images.append(url)
+            if len(images) >= 2: break
         if team:
-            for key in ["fanart","banner","stadium_thumb","badge","logo"]:
+            for field in ["strTeamBadge","strTeamBanner","strTeamFanart1","strTeamFanart2","strTeamFanart3","strTeamFanart4"]:
                 if len(images) >= 4: break
-                url = team.get(key)
-                if url and url not in images:
-                    images.append(url)
-
-        # 4. Legacy player search — football ONLY, filter other sports
-        if not images and names:
-            for name in names[:2]:
-                try:
-                    r = requests.get(
-                        f"{reg.BASE}/searchplayers.php",
-                        params={"p": name}, timeout=10
-                    )
-                    players = (r.json() or {}).get("player") or []
-                    for p in players:
-                        sport = (p.get("strSport") or "").lower()
-                        if sport not in ("soccer", "football"):
-                            continue
-                        url = p.get("strRender") or p.get("strCutout") or p.get("strThumb")
-                        if url and url not in images:
-                            images.append(url)
-                            break
-                except Exception:
-                    pass
-
-        log.info(f"  SportsDB: {len(images)} images for: {title[:50]}")
+                url = team.get(field)
+                if url and url not in images: images.append(url)
         return images[:4]
     except Exception as e:
         log.warning("SportsDB video images failed: " + str(e))
@@ -124,142 +90,53 @@ def format_script(s):
         s=s.replace(w,w.upper()).replace(w.title(),w.upper())
     return s
 def generate_voiceover(script,story_id):
-    """Generate voiceover via ElevenLabs with-timestamps endpoint.
-    Saves audio as voice_{id}.mp3 and timestamps as voice_{id}.json.
-    Returns audio path or None on failure."""
-    import base64, json as _json
     out=os.path.join(OUTPUT_DIR,f"voice_{story_id}.mp3")
-    ts_out=os.path.join(OUTPUT_DIR,f"voice_{story_id}.json")
     os.makedirs(OUTPUT_DIR,exist_ok=True)
     if not script or not script.strip():
         log.error("  Empty script — skipping")
         return None
-    log.info("  Generating ElevenLabs voiceover + timestamps")
-    r=requests.post(
-        f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}/with-timestamps",
-        headers={"xi-api-key":ELEVEN_KEY,"Content-Type":"application/json"},
-        json={"text":format_script(script),"model_id":"eleven_v3",
-              "voice_settings":{"stability":STABILITY,"similarity_boost":SIMILARITY,
-                                "style":STYLE,"use_speaker_boost":True,"speed":SPEED}},
-        timeout=60
-    )
+    log.info("  Generating ElevenLabs voiceover")
+    r=requests.post(f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}",headers={"xi-api-key":ELEVEN_KEY,"Content-Type":"application/json"},json={"text":format_script(script),"model_id":"eleven_v3","voice_settings":{"stability":STABILITY,"similarity_boost":SIMILARITY,"style":STYLE,"use_speaker_boost":True,"speed":SPEED}})
     if r.status_code==200:
-        data=r.json()
-        # Save audio
-        audio_bytes=base64.b64decode(data["audio_base64"])
-        with open(out,"wb") as f: f.write(audio_bytes)
-        # Save alignment timestamps
-        alignment=data.get("alignment",{})
-        _json.dump(alignment, open(ts_out,"w"))
-        log.info(f"  Voiceover saved: {out} | timestamps: {ts_out}")
-        return out
-    if r.status_code==401:
-        log.warning(f"  ElevenLabs auth/quota error: {r.text[:100]}"); return None
+        with open(out,"wb") as f: f.write(r.content)
+        log.info(f"  ElevenLabs voiceover saved: {out}"); return out
+    if r.status_code == 401 and "quota" in r.text.lower():
+        log.warning("  ElevenLabs quota exhausted — skipping video (no fallback)"); return None
     log.error(f"  ElevenLabs error: {r.status_code} {r.text[:200]}"); return None
 def is_womens_story(title):
     t=title.lower()
     return any(k in t for k in WOMEN_KEYWORDS)
 
-def fetch_pexels_images(title, fmt):
-    """Fallback image search via Pexels when SportsDB returns nothing."""
-    if not PEXELS_KEY: return []
-    t = title.lower()
-    # Context-aware queries
-    if any(k in t for k in ["manager","boss","appointed","sacked","head coach","assistant"]):
-        query = "soccer manager dugout touchline coaching"
-    elif any(k in t for k in ["transfer","signing","deal","bid","fee","contract"]):
-        query = "soccer football transfer signing press conference"
-    elif any(k in t for k in ["preview","vs","v ","facing","ahead of"]):
-        query = "soccer football stadium atmosphere crowd night"
-    elif any(k in t for k in ["reaction","win","loss","defeat","goal","scored"]):
-        query = "soccer football goal celebration players"
-    elif fmt == "F5":
-        query = "soccer premier league trophy champions celebration"
-    elif fmt == "F7":
-        query = "soccer football fans stadium debate"
-    else:
-        query = "soccer football premier league match action"
-    try:
-        r = requests.get("https://api.pexels.com/videos/search",
-            headers={"Authorization": PEXELS_KEY},
-            params={"query": query, "per_page": 4, "size": "medium", "orientation": "portrait"},
-            timeout=15)
-        if r.status_code != 200:
-            log.warning(f"  Pexels {r.status_code}: {r.text[:100]}")
-            return []
-        videos = r.json().get("videos", [])
-        urls = []
-        for v in videos:
-            files = v.get("video_files", [])
-            # Prefer HD portrait files
-            hd = [f for f in files if f.get("height", 0) >= 720]
-            pick = hd[0] if hd else (files[0] if files else None)
-            if pick: urls.append(pick["link"])
-        log.info(f"  Pexels fallback: {len(urls)} videos for '{query}'")
-        return urls[:4]
-    except Exception as e:
-        log.warning(f"  Pexels fallback failed: {e}")
-        return []
-
 def fetch_clips(fmt,story_id,n=4,title=""):
-    """Fetch SportsDB images, falling back to Pexels if none found."""
+    """Fetch SportsDB images and convert to video clips. No Pexels, no fallbacks."""
     os.makedirs(BROLL_DIR,exist_ok=True)
     story = {"title": title, "format": fmt}
     images = get_sportsdb_images(story)
     if not images:
-        log.warning(f"  No SportsDB images — trying Pexels fallback for: {title[:50]}")
-        images = fetch_pexels_images(title, fmt)
-    if not images:
-        log.warning(f"  No images found at all — skipping video")
+        log.warning(f"  No SportsDB images found for: {title[:50]} — skipping video")
         return []
-    # Pad to n by cycling
+    # Pad to n images by cycling
     while len(images) < n:
         images.append(images[len(images) % len(images)])
     images = images[:n]
     clips = []
-    for i, url in enumerate(images):
-        log.info(f"  Asset {i+1}: {url[:60]}")
-        p = os.path.join(BROLL_DIR, f"broll_{story_id}_{i}.mp4")
+    for i, img_url in enumerate(images):
+        log.info(f"  SportsDB image {i+1}: {img_url[:60]}")
         try:
-            is_video = any(url.lower().endswith(e) for e in [".mp4",".mov",".webm"]) or "videos/files" in url
-            if is_video:
-                # Download Pexels video directly
-                r = requests.get(url, timeout=30, stream=True)
-                if r.status_code != 200:
-                    log.warning(f"  Video {i+1} download failed: {r.status_code}"); continue
-                tmp_v = os.path.join(BROLL_DIR, f"tmp_{story_id}_{i}.mp4")
-                with open(tmp_v, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=8192): f.write(chunk)
-                cmd = ["ffmpeg", "-y", "-i", tmp_v,
-                       "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920",
-                       "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                       "-t", "15", "-pix_fmt", "yuv420p", "-r", "25", p]
-                result = subprocess.run(cmd, capture_output=True, timeout=90)
-                os.remove(tmp_v)
-            else:
-                # Download SportsDB image and convert with blur background
-                ext = ".png" if url.lower().endswith(".png") else ".jpg"
-                tmp_img = os.path.join(BROLL_DIR, f"img_{story_id}_{i}{ext}")
-                r = requests.get(url, timeout=15)
-                if r.status_code != 200:
-                    log.warning(f"  Image {i+1} download failed: {r.status_code}"); continue
-                open(tmp_img, "wb").write(r.content)
-                # Blurred background fill + sharp centred image + dark overlay
-                vf_img = (
-                    "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
-                    "crop=1080:1920,gblur=sigma=35,eq=brightness=-0.3[bg];"
-                    "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,"
-                    "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black@0[fg];"
-                    "[bg][fg]overlay=0:0,"
-                    "drawbox=x=0:y=0:w=1080:h=1920:color=black@0.35:t=fill,"
-                    "eq=contrast=1.05:saturation=1.1"
-                )
-                cmd = ["ffmpeg", "-y", "-loop", "1", "-i", tmp_img,
-                       "-filter_complex", vf_img,
-                       "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-                       "-t", "15", "-pix_fmt", "yuv420p", "-r", "25", p]
-                result = subprocess.run(cmd, capture_output=True, timeout=120)
-                os.remove(tmp_img)
+            ext = ".png" if img_url.lower().endswith(".png") else ".jpg"
+            tmp_img = os.path.join(BROLL_DIR, f"img_{story_id}_{i}{ext}")
+            r = requests.get(img_url, timeout=15)
+            if r.status_code != 200:
+                log.warning(f"  Image {i+1} download failed: {r.status_code}")
+                continue
+            open(tmp_img, "wb").write(r.content)
+            p = os.path.join(BROLL_DIR, f"broll_{story_id}_{i}.mp4")
+            cmd = ["ffmpeg", "-y", "-loop", "1", "-i", tmp_img,
+                   "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920",
+                   "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                   "-t", "15", "-pix_fmt", "yuv420p", "-r", "25", p]
+            result = subprocess.run(cmd, capture_output=True, timeout=60)
+            os.remove(tmp_img)
             if result.returncode == 0:
                 log.info(f"  Clip {i+1} ready ({os.path.getsize(p)//1024}KB)")
                 clips.append(p)
