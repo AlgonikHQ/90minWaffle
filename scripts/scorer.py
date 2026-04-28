@@ -165,9 +165,31 @@ def score_story(story, star_players):
     breakdown["total"] = score
     return score, breakdown
 
+STAR_SPOTLIGHT_KEYWORDS = [
+    "best player", "star man", "in form", "on fire", "hat-trick", "brace",
+    "masterclass", "outstanding", "brilliant", "incredible", "world class",
+    "player of", "man of the match", "motm", "spotlight", "profile", "legend"
+]
+
+HOT_TAKE_KEYWORDS = [
+    "opinion", "why", "should", "must", "need to", "time to", "case for",
+    "case against", "overrated", "underrated", "debate", "unpopular",
+    "hot take", "controversial", "argument", "verdict", "ranked", "ranking",
+    "best", "worst", "top 5", "top 10", "greatest", "talking points"
+]
+
+TIPS_KEYWORDS = [
+    "odds", "bet", "betting", "accumulator", "acca",
+    "value bet", "each way", "lay", "bookmaker", "bookie",
+    "best bet", "tip of the day", "betting tips", "correct score",
+    "both teams to score", "btts", "over 2.5", "under 2.5", "anytime scorer"
+]
+
 def detect_format(story, score):
     t = text(story).lower()
 
+    if contains_any(t, TIPS_KEYWORDS):
+        return "F8"
     if contains_any(t, HERE_WE_GO) and contains_any(t, TRANSFER_KEYWORDS):
         return "F1"
     if contains_any(t, TRANSFER_KEYWORDS):
@@ -178,13 +200,17 @@ def detect_format(story, score):
         return "F4"
     if contains_any(t, TITLE_RACE_KEYWORDS):
         return "F5"
-    if score >= 75:
+    if contains_any(t, STAR_SPOTLIGHT_KEYWORDS):
+        return "F6"
+    if contains_any(t, HOT_TAKE_KEYWORDS):
+        return "F7"
+    if score >= 45:
         return "F7"
     return "F2"
 
 def confidence_colour(score):
-    if score >= 75: return "green"
-    if score >= 75: return "yellow"
+    if score >= 65: return "green"
+    if score >= 45: return "yellow"
     return "red"
 
 def calc_expiry(fmt):

@@ -73,7 +73,7 @@ async def step_cards():
     try:
         cg = import_module("card_generator", "/root/90minwaffle/scripts/card_generator.py")
         
-        return await cg.process_cards(limit=5)
+        return await cg.process_cards(limit=10)
     except Exception as e:
         log.error(f"  Cards failed: {e}"); return 0
 
@@ -87,6 +87,27 @@ def step_script(limit=3):
     except Exception as e:
         log.error(f"  Script generation failed: {e}")
         return 0
+
+def get_dynamic_video_cap():
+    """Calculate daily video cap based on ElevenLabs quota and days remaining in billing period."""
+    try:
+        import requests as _req
+        from datetime import datetime, timezone
+        key = os.getenv("ELEVENLABS_API_KEY", "")
+        r = _req.get("https://api.elevenlabs.io/v1/user", headers={"xi-api-key": key}, timeout=10)
+        if r.status_code != 200: return 1
+        data = r.json().get("subscription", {})
+        remaining = data.get("character_limit", 10000) - data.get("character_count", 0)
+        reset_ts  = data.get("next_character_count_reset_unix", 0)
+        days_left = max(1, (datetime.fromtimestamp(reset_ts, tz=timezone.utc) - datetime.now(timezone.utc)).days)
+        chars_per_video = 850
+        affordable = int(remaining / chars_per_video)
+        daily_cap = max(0, min(3, affordable // days_left))
+        log.info(f"  ElevenLabs quota: {remaining} chars | {days_left} days left | affordable: {affordable} videos | daily cap: {daily_cap}")
+        return daily_cap
+    except Exception as e:
+        log.warning(f"  Dynamic cap failed: {e} — defaulting to 1")
+        return 1
 
 DAILY_VIDEO_CAP = 3
 VIDEO_SCORE_GATE = 75
@@ -116,8 +137,9 @@ def step_video(limit=1):
 
         # Daily cap check
         today_count = videos_produced_today()
-        if today_count >= DAILY_VIDEO_CAP:
-            log.info(f"  Daily video cap reached ({today_count}/{DAILY_VIDEO_CAP}) — skipping, cards will post instead")
+        dynamic_cap = get_dynamic_video_cap()
+        if today_count >= dynamic_cap:
+            log.info(f"  Daily video cap reached ({today_count}/{dynamic_cap}) — skipping, cards will post instead")
             return 0
 
         # ElevenLabs quota check
@@ -126,7 +148,7 @@ def step_video(limit=1):
             log.warning(f"  ElevenLabs quota too low ({remaining_chars} chars) — skipping video, cards will post instead")
             return 0
 
-        slots = DAILY_VIDEO_CAP - today_count
+        slots = dynamic_cap - today_count
         effective_limit = min(limit, slots)
 
         conn = get_db()

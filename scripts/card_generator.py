@@ -26,12 +26,13 @@ WEBHOOKS = {
     "premier_league": os.getenv("DISCORD_WEBHOOK_PREMIER_LEAGUE"),
     "championship":   os.getenv("DISCORD_WEBHOOK_CHAMPIONSHIP"),
     "general":        os.getenv("DISCORD_WEBHOOK_GENERAL"),
+    "tips":           os.getenv("DISCORD_WEBHOOK_BETS"),
 }
 
-FORMAT_DISCORD = {"F1":"breaking_news","F2":"breaking_news","F3":"match_day","F4":"match_day","F5":"premier_league","F6":"general","F7":"hot_takes"}
-FORMAT_EMOJI   = {"F1":"🚨","F2":"📰","F3":"⚽","F4":"📊","F5":"🏆","F6":"⭐","F7":"🔥"}
-FORMAT_LABEL   = {"F1":"CONFIRMED TRANSFER","F2":"TRANSFER RUMOUR","F3":"MATCH PREVIEW","F4":"POST-MATCH","F5":"TITLE RACE","F6":"STAR SPOTLIGHT","F7":"HOT TAKE"}
-COLOUR_MAP     = {"F1":0x00FF87,"F2":0xE63946,"F3":0x4361EE,"F4":0xF77F00,"F5":0xFFD60A,"F6":0x7B2D8B,"F7":0xFF4500}
+FORMAT_DISCORD = {"F1":"breaking_news","F2":"breaking_news","F3":"match_day","F4":"match_day","F5":"premier_league","F6":"general","F7":"hot_takes","F8":"tips"}
+FORMAT_EMOJI   = {"F1":"🚨","F2":"📰","F3":"⚽","F4":"📊","F5":"🏆","F6":"⭐","F7":"🔥","F8":"🎯"}
+FORMAT_LABEL   = {"F1":"CONFIRMED TRANSFER","F2":"TRANSFER RUMOUR","F3":"MATCH PREVIEW","F4":"POST-MATCH","F5":"TITLE RACE","F6":"STAR SPOTLIGHT","F7":"HOT TAKE","F8":"TIPS & BETS"}
+COLOUR_MAP     = {"F1":0x00FF87,"F2":0xE63946,"F3":0x4361EE,"F4":0xF77F00,"F5":0xFFD60A,"F6":0x7B2D8B,"F7":0xFF4500,"F8":0x00B4D8}
 
 def get_db(): return sqlite3.connect(DB_PATH)
 
@@ -122,15 +123,15 @@ async def post_telegram_card(story):
         log.info(f"  Telegram: {story['title'][:60]}"); return True
     except Exception as e: log.error(f"  Telegram failed: {e}"); return False
 
-async def process_cards(limit=5):
+async def process_cards(limit=10):
     conn=get_db(); c=conn.cursor()
-    c.execute("""SELECT id,title,url,source,score,format,winning_hook,caption FROM stories WHERE status='shippable' AND score>=60 AND (notes IS NULL OR notes NOT LIKE '%card_sent%') AND winning_hook IS NOT NULL AND winning_hook != '' ORDER BY score DESC LIMIT ?""",(limit,))
+    c.execute("""SELECT id,title,url,source,score,format,winning_hook,caption FROM stories WHERE status IN ('shippable','holding') AND score>=45 AND (notes IS NULL OR notes NOT LIKE '%card_sent%') ORDER BY score DESC LIMIT ?""",(limit,))
     rows=c.fetchall(); conn.close()
     if not rows: log.info("No stories for cards"); return 0
     log.info(f"=== Generating {len(rows)} cards ===")
     sent=0
     for r in rows:
-        story={"id":r[0],"title":r[1],"url":r[2],"source":r[3],"score":r[4],"format":r[5],"winning_hook":r[6],"caption":r[7]}
+        story={"id":r[0],"title":r[1],"url":r[2],"source":r[3],"score":r[4],"format":r[5],"winning_hook":r[6] or r[1],"caption":r[7] or ""}
         d=post_discord_card(story); t=await post_telegram_card(story)
         if d or t:
             conn=get_db(); c=conn.cursor()
