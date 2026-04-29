@@ -163,37 +163,6 @@ def _looks_like_real_photo(url: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Layer 1.5 — Wikipedia free editorial photos (no API key needed)
-# ---------------------------------------------------------------------------
-
-def _wikipedia_player(name: str) -> Optional[str]:
-    """Fetch editorial player photo from Wikipedia. Free, no key, high quality."""
-    if not name or len(name) < 4:
-        return None
-    try:
-        slug = name.strip().replace(" ", "_")
-        r = requests.get(
-            f"https://en.wikipedia.org/api/rest_v1/page/summary/{slug}",
-            headers={"User-Agent": USER_AGENT},
-            timeout=HTTP_TIMEOUT,
-        )
-        if r.status_code != 200:
-            return None
-        data = r.json()
-        thumb = data.get("thumbnail", {}).get("source", "")
-        # Upgrade to full resolution — Wikipedia thumbnails use /320px- prefix
-        if thumb and "320px" in thumb:
-            thumb = thumb.replace("320px", "800px")
-        if thumb and _looks_like_real_photo(thumb):
-            log.debug(f"  [image_resolver] Wikipedia hit: {name}")
-            return thumb
-        return None
-    except Exception as e:
-        log.debug(f"  [image_resolver] Wikipedia failed ({name}): {e}")
-        return None
-
-
-# ---------------------------------------------------------------------------
 # Layer 2 — RSS media fields (passed through from rss_poller if available)
 # ---------------------------------------------------------------------------
 
@@ -284,10 +253,6 @@ def resolve_image(story: dict) -> Optional[str]:
     candidates: list[tuple[str, str]] = []  # (url, source_label)
 
     # ── Layer 1: OG scrape ──────────────────────────────────────────────────
-    # Enrich context with script excerpt if available
-    script_ctx = story.get("script", "") or ""
-    hook = f"{hook} {script_ctx[:120]}".strip()
-
     og = _og_scrape(url)
     if og:
         candidates.append((og, "OG"))
@@ -297,22 +262,9 @@ def resolve_image(story: dict) -> Optional[str]:
     if rss and rss != og:
         candidates.append((rss, "RSS"))
 
-    # ── Layer 2.5: Wikipedia player photos ─────────────────────────────────
-    try:
-        from sportsdb_registry import extract_player_names
-        wiki_text = f"{title} {hook}"
-        wiki_names = extract_player_names(wiki_text, limit=3)
-        for wname in wiki_names:
-            wiki_img = _wikipedia_player(wname)
-            if wiki_img and wiki_img not in [c[0] for c in candidates]:
-                candidates.append((wiki_img, f"Wikipedia:{wname}"))
-                break  # one good Wikipedia hit is enough
-    except Exception as e:
-        log.debug(f"  [image_resolver] Wikipedia layer failed: {e}")
-
     # ── Layer 3+4: TheSportsDB ──────────────────────────────────────────────
     sdb = _sportsdb(title, hook)
-    if sdb and sdb not in [c[0] for c in candidates]:
+    if sdb and sdb not in (og, rss):
         candidates.append((sdb, "SportsDB"))
 
     if not candidates:

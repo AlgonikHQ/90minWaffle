@@ -329,17 +329,13 @@ def best_player_image(player: dict) -> Optional[str]:
 
 
 def best_team_image(team: dict) -> Optional[str]:
-    """Fanart > banner > stadium > logo > badge (badge is absolute last resort).
-    
-    Fanart and stadium images are actual photos — vastly better than badge JPEGs.
-    Badge is kept only as a final fallback when nothing else exists.
-    """
+    """Badge > logo > banner > fanart > stadium thumb. None if all missing."""
     return (
-        team.get("fanart")
-        or team.get("banner")
-        or team.get("stadium_thumb")
+        team.get("badge")
         or team.get("logo")
-        or team.get("badge")
+        or team.get("banner")
+        or team.get("fanart")
+        or team.get("stadium_thumb")
     )
 
 
@@ -363,22 +359,11 @@ def find_player_image(player_name: str, team_id: str) -> Optional[str]:
     # Exact name match first
     for p in roster:
         if _normalize(p.get("name", "")) == pn:
-            img = best_player_image(p)
-            if img: return img
+            return best_player_image(p)
     # Substring match (handles "Salah" vs "Mohamed Salah")
     for p in roster:
-        pname = _normalize(p.get("name", ""))
-        if pn in pname or pname in pn:
-            img = best_player_image(p)
-            if img: return img
-    # Last word match — "Haaland" matches "Erling Haaland"
-    pn_last = pn.split()[-1] if pn.split() else pn
-    if len(pn_last) > 4:
-        for p in roster:
-            pname_parts = _normalize(p.get("name", "")).split()
-            if pname_parts and pname_parts[-1] == pn_last:
-                img = best_player_image(p)
-                if img: return img
+        if pn in _normalize(p.get("name", "")):
+            return best_player_image(p)
     return None
 
 
@@ -401,69 +386,34 @@ def _team_word_set() -> set:
     return words
 
 
-# Known single-name players and managers — matched without needing a surname pair
-KNOWN_SINGLES = [
-    # PL players
-    "haaland","salah","saka","rice","trent","isak","eze","palmer","rashford",
-    "fernandes","maddison","son","havertz","odegaard","martinelli","wilson",
-    "palhinha","sessegnon","watkins","ollie","gallagher","zaha","madueke",
-    "nketiah","trossard","white","timber","calafiori","raya","flekken",
-    "fabianski","areola","henderson","pope","pickford","flaherty",
-    "mudryk","maatsen","sterling","cucurella","colwill","gusto","james",
-    "reece","caicedo","jackson","nkunku","sancho","silva","thiago",
-    # European stars
-    "mbappe","vinicius","bellingham","yamal","dembele","lewandowski",
-    "kane","wirtz","musiala","pedri","gavi","ter stegen","courtois",
-    "alisson","ederson","oblak","sommer","neuer","szczesny",
-    "rodri","modric","kroos","camavinga","tchouameni","valverde",
-    "benzema","griezmann","giroud","benzema","diaby","cherki",
-    # Managers
-    "arteta","guardiola","slot","howe","maresca","iraola","glass",
-    "nuno","moyes","wilder","edwards","freedman","lampard","gerrard",
-    "ancelotti","flick","kompany","tuchel","nagelsmann","xabi",
-    "mourinho","ten hag","amorim","klopp","pochettino","conte",
-    "fabregas","de zerbi","emery","villa","unai","rosenior",
-    # Scotland
-    "rodgers","clement","mcginn","tierney","dykes","adams",
-]
+def extract_player_names(text: str, limit: int = 5) -> List[str]:
+    """Pull plausible 'First Last' name candidates from free text.
 
-def extract_player_names(text: str, limit: int = 8) -> List[str]:
-    """Pull plausible player/manager name candidates from free text.
-
-    Strategy:
-    1. Check against KNOWN_SINGLES first — single surname match
-    2. Find capitalised First Last pairs, reject team-name tokens
-    3. Combine, deduplicate, return up to limit
+    Strategy: find every capitalised word, then form overlapping pairs of
+    consecutive capitalised words. Reject any pair where either word is a
+    known team-name token (so 'Newcastle Declan' → rejected, but the next
+    pair 'Declan Rice' → accepted).
     """
     if not text:
         return []
-    t_lower = text.lower()
-    names: List[str] = []
-
-    # Pass 1 — known singles (highest confidence)
-    for name in KNOWN_SINGLES:
-        if name in t_lower and name.title() not in names:
-            names.append(name.title())
-        if len(names) >= limit:
-            return names
-
-    # Pass 2 — First Last capitalised pairs
     words = _WORD_RE.findall(text)
-    if len(words) >= 2:
-        team_tokens = _team_word_set()
-        for i in range(len(words) - 1):
-            w1, w2 = words[i], words[i + 1]
-            if len(w1) <= 2 or len(w2) <= 2:
-                continue
-            if _normalize(w1) in team_tokens or _normalize(w2) in team_tokens:
-                continue
-            full = f"{w1} {w2}"
-            if full not in names:
-                names.append(full)
-            if len(names) >= limit:
-                break
+    if len(words) < 2:
+        return []
 
-    return names[:limit]
+    team_tokens = _team_word_set()
+    names: List[str] = []
+    for i in range(len(words) - 1):
+        w1, w2 = words[i], words[i + 1]
+        if len(w1) <= 2 or len(w2) <= 2:
+            continue
+        if _normalize(w1) in team_tokens or _normalize(w2) in team_tokens:
+            continue
+        full = f"{w1} {w2}"
+        if full not in names:
+            names.append(full)
+        if len(names) >= limit:
+            break
+    return names
 
 
 def get_image_for_story(title: str, hook: str = "") -> Optional[str]:
