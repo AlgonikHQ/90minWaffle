@@ -41,10 +41,38 @@ TRANSFER_EXCLUSIONS = [
 ]
 
 TITLE_RACE_KEYWORDS = [
-    "title race", "title charge", "champions", "championship", "top of the table",
-    "points clear", "points behind", "runin", "run-in", "decider", "deciding",
-    "golden boot", "top four", "top 4", "european spot", "relegation battle",
-    "relegated", "drop zone", "survival"
+    "title race", "title charge", "title run", "title fight",
+    "top of the table", "points clear", "points behind",
+    "run-in", "run in", "decider", "title decider",
+    "golden boot", "top four", "top 4", "top-four",
+    "european spot", "europa league spot", "champions league spot",
+    "relegation battle", "relegation fight", "relegation zone",
+    "relegated", "drop zone", "survival", "staying up",
+    "league leaders", "premier league title", "prem title"
+]
+
+# UCL / European competition keywords — never title race
+UCL_KEYWORDS = [
+    "champions league", "ucl", "europa league", "conference league",
+    "semi-final", "semi final", "quarter-final", "quarter final",
+    "round of 16", "knockout", "european night", "away goals",
+    "aggregate", "two legs", "second leg", "first leg"
+]
+
+# Post-match result keywords — strict
+RESULT_KEYWORDS = [
+    "full time", "full-time", "ft:", "match report", "highlights",
+    "post-match", "post match", "reaction", "after the match",
+    "player ratings", "man of the match", "motm", "match rating",
+    "five things we learned", "talking points", "verdict"
+]
+
+# Preview keywords — strict
+PREVIEW_KEYWORDS = [
+    "preview", "prediction", "predicted lineup", "predicted xi",
+    "team news", "ahead of", "build-up", "build up",
+    "how to watch", "kick off time", "kick-off time",
+    "match preview", "everything you need to know"
 ]
 
 BIG_CLUBS = [
@@ -198,71 +226,68 @@ TIPS_KEYWORDS = [
 def detect_format(story, score):
     t = text(story).lower()
 
-    # F8 — Tips & Bets (highest priority)
+    # F8 — Tips & Bets (always first)
     if contains_any(t, TIPS_KEYWORDS):
         return "F8"
 
-    # Retirement / personal news — never a transfer story
-    if contains_any(t, ["retires", "retirement", "announces retirement", "hanging up", "calling time"]):
-        return "F6"  # Star Spotlight
-
-    # Manager / coaching news
-    if contains_any(t, ["sacked", "appointed manager", "new manager", "head coach", "interim manager",
-                         "managerial", "takes charge", "named manager", "manager of the year",
-                         "manager of year", "nominated for"]):
-        return "F7"  # Hot Take
-
-    # Injury news
-    if contains_any(t, ["injured", "injury", "ruled out", "out for", "scan", "surgery",
-                         "fitness doubt", "doubt for", "limped off", "stretcher"]):
-        return "F6"  # Star Spotlight
-
-    # Kit / merchandise — not transfer
-    if contains_any(t, ["kit", "strip", "jersey", "shirt release", "unveiled", "badge", "crest"]):
-        return "F6"
-
-    # Award / stats / records
-    if contains_any(t, ["award", "nominated", "trophy", "golden boot", "ballon", "record", "broke a", "history"]):
-        return "F6"
-
-    # Podcast / analysis / opinion pieces
-    if contains_any(t, ["podcast", "analysis", "opinion", "column", "sacked in the morning",
-                         "the debate", "special report", "deep dive"]):
-        return "F7"
-
-    # F1 — Confirmed transfer (Here We Go + strong transfer signal, no exclusions)
+    # F1 — Confirmed transfer (Here We Go signal + strict transfer keywords, no exclusions)
     is_excluded = contains_any(t, TRANSFER_EXCLUSIONS)
     if not is_excluded and contains_any(t, HERE_WE_GO) and contains_any(t, TRANSFER_KEYWORDS):
         return "F1"
 
-    # F2 — Transfer rumour (strong transfer signal only, no exclusions)
+    # F2 — Transfer rumour (strict transfer keywords only, no ambiguous words)
     if not is_excluded and contains_any(t, TRANSFER_KEYWORDS):
         return "F2"
 
-    # F3 — Match preview
-    if contains_any(t, ["preview", "prediction", "ahead of", "facing", "vs", "v ", "line-up", "lineup",
-                         "team news", "kick off", "kicks off", "build-up"]):
-        return "F3"
-
-    # F4 — Post match
-    if contains_any(t, ["reaction", "post-match", "post match", "full time", "full-time",
-                         "after the match", "beaten", "wins", "win over", "defeat",
-                         "result", "final score", "highlights", "player ratings"]):
+    # F4 — Post-match result (check before preview — result pages often mention upcoming too)
+    if contains_any(t, RESULT_KEYWORDS):
         return "F4"
 
-    # F5 — Title race / league table
-    if contains_any(t, TITLE_RACE_KEYWORDS):
+    # UCL / European competition content — route as F4 post-match or F3 preview
+    if contains_any(t, UCL_KEYWORDS):
+        if contains_any(t, PREVIEW_KEYWORDS + ["ahead of", "vs", "v ", "how to watch", "kick"]):
+            return "F3"
+        return "F4"  # Default UCL content to match report / reaction
+
+    # F3 — Match preview (domestic)
+    if contains_any(t, PREVIEW_KEYWORDS + ["vs", "v ", "facing", "takes on"]):
+        return "F3"
+
+    # F5 — Title race (strict domestic league only — UCL excluded above)
+    if contains_any(t, TITLE_RACE_KEYWORDS) and not contains_any(t, UCL_KEYWORDS):
         return "F5"
 
-    # F6 — Star Spotlight
+    # F6 — Star Spotlight: retirement, injury, personal, kit, award, records
+    if contains_any(t, [
+        "retires", "retirement", "announces retirement", "hanging up", "calling time",
+        "injured", "injury", "ruled out", "out for", "scan", "surgery", "fitness doubt",
+        "kit", "strip", "jersey", "shirt release",
+        "award", "nominated", "ballon", "record", "broke a", "history", "milestone",
+        "profile", "legend", "spotlight", "man of the match", "motm",
+        "player of", "young player"
+    ]):
+        return "F6"
+
+    # F7 — Hot Take: manager news, opinion, analysis, podcast
+    if contains_any(t, [
+        "sacked", "appointed manager", "new manager", "head coach", "interim",
+        "takes charge", "named manager", "manager of the year", "nominated for",
+        "podcast", "analysis", "opinion", "column", "verdict", "ranked", "ranking",
+        "why", "should", "must", "case for", "argument", "controversial",
+        "sacked in the morning", "deep dive", "five things", "talking points",
+        "what went wrong", "what next", "the problem with", "hot take"
+    ]):
+        return "F7"
+
+    # F6 — Star Spotlight (secondary check via keyword list)
     if contains_any(t, STAR_SPOTLIGHT_KEYWORDS):
         return "F6"
 
-    # F7 — Hot Take / opinion
+    # F7 — Hot Take (secondary check via keyword list)
     if contains_any(t, HOT_TAKE_KEYWORDS):
         return "F7"
 
-    # Default — opinion/analysis for anything that doesn't fit neatly
+    # Default — F7 for scored content, F6 for everything else
     if score >= 45:
         return "F7"
     return "F6"

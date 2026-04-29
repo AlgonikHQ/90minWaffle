@@ -93,7 +93,25 @@ def build_telegram_buttons(story):
     return InlineKeyboardMarkup(keyboard)
 
 def post_discord_card(story):
-    t = (story.get("title") or "").lower(); src = story.get("source") or ""; comp = story.get("competition") or ""; is_chip = (src in ("BBC Championship","Football365")) or (comp == "ELC") or any(k in t for k in ["championship","middlesbrough","sheffield","norwich","watford","preston","stoke","cardiff","swansea","west brom","hull city","bristol city","coventry","plymouth","blackburn","ipswich","queens park","luton","derby"]); channel_key = "championship" if is_chip else FORMAT_DISCORD.get(story["format"],"general")
+    t = (story.get("title") or "").lower()
+    src = story.get("source") or ""
+    comp = story.get("competition") or ""
+    fmt = story.get("format", "F6")
+
+    # Championship detection — strict club list only, not "championship" keyword alone
+    championship_clubs = ["middlesbrough","sheffield united","sheffield wednesday","norwich","watford","preston","stoke","cardiff","swansea","west brom","hull city","bristol city","coventry","plymouth","blackburn","ipswich","queens park rangers","luton","derby","millwall","sunderland","leeds","burnley"]
+    is_champ = (src == "BBC Championship") or (comp == "ELC") or any(k in t for k in championship_clubs)
+
+    # UCL / European content always goes to match_day not premier_league
+    ucl_terms = ["champions league", "ucl", "europa league", "conference league", "semi-final", "quarter-final", "second leg", "first leg", "aggregate"]
+    is_ucl = any(k in t for k in ucl_terms)
+
+    if is_champ:
+        channel_key = "championship"
+    elif is_ucl and fmt in ("F3", "F4"):
+        channel_key = "match_day"
+    else:
+        channel_key = FORMAT_DISCORD.get(fmt, "general")
     webhook=WEBHOOKS.get(channel_key)
     if not webhook: return False
     try:
