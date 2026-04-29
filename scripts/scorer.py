@@ -19,6 +19,25 @@ log = logging.getLogger(__name__)
 
 # ── Keyword signal lists ──────────────────────────────────────────────────────
 
+WOMENS_SIGNALS = [
+    "women", "woman", "wsl", "women's super league", "uwcl",
+    "women's champions league", "lionesses", "england women",
+    "women's world cup", "women's euro", "weuros",
+    "arsenal women", "chelsea women", "manchester city women",
+    "manchester united women", "liverpool women", "tottenham women",
+    "leicester women", "aston villa women", "brighton women",
+    "everton women", "west ham women", "newcastle women",
+    "barcelona femeni", "lyon women", "psg women",
+    "she", "her", "girls", "female football",
+    "women's fa cup", "women's league cup", "conti cup",
+    "millie bright", "leah williamson", "beth mead",
+    "alex greenwood", "keira walsh", "ella toone",
+    "alessia russo", "lucy bronze", "mary earps",
+    "chloe kelly", "lauren james", "jess carter",
+    "vivianne miedema", "sam kerr", "ada hegerberg",
+    "aitana bonmati", "alexia putellas",
+]
+
 HERE_WE_GO = [
     "here we go", "confirmed", "official", "signs", "signed", "done deal",
     "agreement reached", "medical", "completes move", "joins", "unveiled"
@@ -219,11 +238,12 @@ FORMAT_MAP = {
     "title_race":         "F5",
     "star_spotlight":     "F6",
     "hot_take":           "F7",
+    "womens_football":    "F9",
 }
 
 EXPIRY_HOURS = {
     "F1": 2, "F2": 6, "F3": 24, "F4": 4,
-    "F5": 24, "F6": 48, "F7": 12
+    "F5": 24, "F6": 48, "F7": 12, "F9": 24
 }
 
 def get_db():
@@ -253,6 +273,12 @@ def score_story(story, star_players):
     # Must contain at least one football signal to proceed
     if not contains_any(t, FOOTBALL_SIGNALS):
         return 0, {"disqualified": "no football signal"}
+
+    # ── Women's football boost ────────────────────────────────────────────────
+    if contains_any(t, WOMENS_SIGNALS):
+        score += 5
+        breakdown["womens_football"] = 5
+        story["is_womens"] = True
 
     # ── Source tier ───────────────────────────────────────────────────────────
     tier = story.get("source_tier", 3)
@@ -344,6 +370,10 @@ TIPS_KEYWORDS = [
 
 def detect_format(story, score):
     t = text(story).lower()
+
+    # F9 — Women's Football (always check first after tips)
+    if contains_any(t, WOMENS_SIGNALS):
+        return "F9"
 
     # F8 — Tips & Bets (always first)
     if contains_any(t, TIPS_KEYWORDS):

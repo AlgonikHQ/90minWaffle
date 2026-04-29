@@ -12,32 +12,47 @@ TELEGRAM_BETS_CHANNEL = os.getenv("TELEGRAM_BETS_CHANNEL")
 DB_PATH           = "/root/90minwaffle/data/waffle.db"
 LOG_PATH          = "/root/90minwaffle/logs/bet_alert.log"
 
-logging.basicConfig(
-    level=logging.INFO,
+logging.basicConfig(level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.FileHandler(LOG_PATH), logging.StreamHandler()]
-)
+    handlers=[logging.FileHandler(LOG_PATH), logging.StreamHandler()])
 log = logging.getLogger(__name__)
 
-LEAGUE_IDS = [39, 40]  # 39=Premier League, 40=Championship
-EDGE_THRESHOLD = 5.0  # minimum edge % to alert
+LEAGUE_IDS = {
+    39:  "Premier League",
+    40:  "Championship",
+    78:  "Bundesliga",
+    135: "Serie A",
+    61:  "Ligue 1",
+    140: "La Liga",
+    88:  "Eredivisie",
+    94:  "Primeira Liga",
+}
+
+EDGE_THRESHOLD = 5.0
+
+def _in_fixture_window():
+    now = datetime.now(timezone.utc)
+    h, wd = now.hour, now.weekday()
+    if wd in (5,6) and 10 <= h <= 18: return True
+    if wd in (1,2,3) and 17 <= h <= 23: return True
+    if wd == 4 and 18 <= h <= 22: return True
+    if wd == 0 and 18 <= h <= 22: return True
+    return False
 
 def get_odds(league_id):
-    url = f"{API_FOOTBALL_URL}/odds"
+    url = API_FOOTBALL_URL + "/odds"
     headers = {"x-apisports-key": API_FOOTBALL_KEY}
-    params = {"league": league_id, "season": 2024, "bookmaker": 6}  # bookmaker 6 = Bet365
+    params = {"league": league_id, "season": 2025, "bookmaker": 6}
     try:
         r = requests.get(url, headers=headers, params=params, timeout=15)
         if r.status_code == 200:
-            data = r.json()
-            results = data.get("response", [])
-            log.info(f"Fetched {len(results)} matches for league {league_id}")
+            results = r.json().get("response", [])
+            log.info("Fetched " + str(len(results)) + " matches for league " + str(league_id))
             return results
-        else:
-            log.error(f"API-Football error {r.status_code}: {r.text[:200]}")
-            return []
+        log.error("API-Football error " + str(r.status_code))
+        return []
     except Exception as e:
-        log.error(f"Odds fetch failed: {e}")
+        log.error("Odds fetch failed: " + str(e))
         return []
 
 def parse_match(item):
@@ -66,19 +81,6 @@ def parse_odds(item):
                     outcomes[name] = {"price": price, "bookmaker": bm["name"]}
     return outcomes
 
-def find_best_odds(match):
-    outcomes = {}
-    for bm in match.get("bookmakers", []):
-        for market in bm.get("markets", []):
-            if market["key"] != "h2h":
-                continue
-            for outcome in market["outcomes"]:
-                name = outcome["name"]
-                price = outcome["price"]
-                if name not in outcomes or price > outcomes[name]["price"]:
-                    outcomes[name] = {"price": price, "bookmaker": bm["title"]}
-    return outcomes
-
 def implied_prob(decimal_odds):
     return 1 / decimal_odds if decimal_odds > 0 else 0
 
@@ -87,30 +89,21 @@ def calc_margin(outcomes):
     return round((total - 1) * 100, 2)
 
 def find_edges(outcomes):
-    best = outcomes
-    if len(best) < 2:
+    if len(outcomes) < 2:
         return []
-
-    margin = calc_margin(best)
+    margin = calc_margin(outcomes)
     edges = []
-
-    for name, data in best.items():
+    for name, data in outcomes.items():
         odds = data["price"]
         prob = implied_prob(odds)
-        fair_prob = prob / sum(implied_prob(o["price"]) for o in best.values())
+        fair_prob = prob / sum(implied_prob(o["price"]) for o in outcomes.values())
         fair_odds = round(1 / fair_prob, 2) if fair_prob > 0 else 0
         edge_pct = round((odds / fair_odds - 1) * 100, 2) if fair_odds > 0 else 0
-
         if edge_pct >= EDGE_THRESHOLD:
             edges.append({
-                "selection": name,
-                "odds": odds,
-                "bookmaker": data["bookmaker"],
-                "fair_odds": fair_odds,
-                "edge_pct": edge_pct,
-                "margin": margin
+                "selection": name, "odds": odds, "bookmaker": data["bookmaker"],
+                "fair_odds": fair_odds, "edge_pct": edge_pct, "margin": margin
             })
-
     return edges
 
 def already_alerted(guid):
@@ -134,109 +127,131 @@ def save_alert(guid, match, edge):
             home TEXT, away TEXT, commence_time TEXT,
             selection TEXT, odds REAL, bookmaker TEXT,
             fair_odds REAL, edge_pct REAL, margin REAL,
-            alerted_at TEXT DEFAULT (datetime('now'))
-        )""")
+            alerted_at TEXT DEFAULT (datetime('now')))""")
         c.execute("""INSERT OR IGNORE INTO bet_alerts
             (guid, home, away, commence_time, selection, odds, bookmaker, fair_odds, edge_pct, margin)
             VALUES (?,?,?,?,?,?,?,?,?,?)""", (
-            guid,
-            match.get("home_team"),
-            match.get("away_team"),
-            match.get("commence_time"),
-            edge["selection"],
-            edge["odds"],
-            edge["bookmaker"],
-            edge["fair_odds"],
-            edge["edge_pct"],
-            edge["margin"]
-        ))
+            guid, match.get("home_team"), match.get("away_team"),
+            match.get("commence_time"), edge["selection"], edge["odds"],
+            edge["bookmaker"], edge["fair_odds"], edge["edge_pct"], edge["margin"]))
         conn.commit()
         conn.close()
     except Exception as e:
-        log.error(f"Save alert failed: {e}")
+        log.error("Save alert failed: " + str(e))
+
+def _get_team_image(home, away):
+    try:
+        import sys
+        sys.path.insert(0, "/root/90minwaffle/scripts")
+        from sportsdb_registry import find_team_in_text, best_team_image
+        team = find_team_in_text(home + " " + away)
+        if team:
+            return best_team_image(team)
+    except Exception:
+        pass
+    return None
 
 def post_discord(match, edge):
     if not DISCORD_BETS:
         log.error("No DISCORD_WEBHOOK_BETS configured")
         return False
-
     home = match.get("home_team", "?")
     away = match.get("away_team", "?")
+    league = match.get("league", "Football")
     kick_off = match.get("commence_time", "")[:16].replace("T", " ")
-
+    stars = "+" * min(5, max(1, int(edge["edge_pct"] / 2)))
+    desc = (
+        "**" + edge["selection"] + "** @ `" + str(edge["odds"]) + "` (" + edge["bookmaker"] + ")\n"
+        + stars + " Edge: **+" + str(edge["edge_pct"]) + "%** above fair value\n"
+        + "Fair odds: `" + str(edge["fair_odds"]) + "` | Margin: `" + str(edge["margin"]) + "%`"
+    )
     embed = {
-        "title": f"VALUE BET ALERT",
-        "description": f"**{home} vs {away}**\nKick-off: {kick_off} UTC",
-        "color": 0x00FF87,
+        "author": {"name": "VALUE EDGE ALERT - " + league},
+        "title": home + " vs " + away,
+        "description": desc,
+        "color": 0x00C853,
         "fields": [
-            {"name": "Selection", "value": edge["selection"], "inline": True},
-            {"name": "Odds", "value": str(edge["odds"]), "inline": True},
-            {"name": "Bookmaker", "value": edge["bookmaker"], "inline": True},
-            {"name": "Fair Odds", "value": str(edge["fair_odds"]), "inline": True},
-            {"name": "Edge", "value": f"+{edge['edge_pct']}%", "inline": True},
-            {"name": "Market Margin", "value": f"{edge['margin']}%", "inline": True},
+            {"name": "Kick-off", "value": kick_off + " UTC", "inline": True},
+            {"name": "League", "value": league, "inline": True},
+            {"name": "Edge", "value": "+" + str(edge["edge_pct"]) + "%", "inline": True},
         ],
-        "footer": {"text": "90minWaffle Bet Alerts | Gamble responsibly"},
+        "footer": {"text": "90minWaffle x StatiqFC | Value edges only | Gamble responsibly 18+"},
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
-
+    img = _get_team_image(home, away)
+    if img:
+        embed["image"] = {"url": img}
     try:
         r = requests.post(DISCORD_BETS, json={"embeds": [embed]}, timeout=15)
         if r.status_code in [200, 204]:
-            log.info(f"Discord bet alert sent: {home} vs {away} — {edge['selection']} @ {edge['odds']}")
+            log.info("Discord bet alert: " + home + " vs " + away + " - " + edge["selection"])
             return True
-        else:
-            log.error(f"Discord error {r.status_code}: {r.text[:200]}")
-            return False
+        log.error("Discord error " + str(r.status_code))
+        return False
     except Exception as e:
-        log.error(f"Discord post failed: {e}")
+        log.error("Discord post failed: " + str(e))
         return False
 
 def post_telegram(match, edge):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_BETS_CHAT:
-        log.warning("Telegram bets not configured — skipping")
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_BETS_CHANNEL:
+        log.warning("Telegram bets not configured - skipping")
         return
-
     home = match.get("home_team", "?")
     away = match.get("away_team", "?")
+    league = match.get("league", "Football")
     kick_off = match.get("commence_time", "")[:16].replace("T", " ")
-
-    msg = "VALUE BET ALERT\n\n" + home + " vs " + away + "\nKick-off: " + kick_off + " UTC\n\nSelection: *" + edge["selection"] + "*\nOdds: *" + str(edge["odds"]) + "* (" + edge["bookmaker"] + ")\nFair Odds: " + str(edge["fair_odds"]) + "\nEdge: +" + str(edge["edge_pct"]) + "%\n\n_Gamble responsibly_"
+    stars = "+" * min(5, max(1, int(edge["edge_pct"] / 2)))
+    msg = (
+        "*VALUE EDGE - " + league + "*\n"
+        "--------------------\n"
+        "*" + home + " vs " + away + "*\n"
+        "Kick-off: `" + kick_off + " UTC`\n\n"
+        "Selection: *" + edge["selection"] + "*\n"
+        "Odds: *" + str(edge["odds"]) + "* (" + edge["bookmaker"] + ")\n"
+        "Fair Odds: `" + str(edge["fair_odds"]) + "`\n"
+        "Edge: *+" + str(edge["edge_pct"]) + "%* " + stars + "\n"
+        "Margin: `" + str(edge["margin"]) + "%`\n"
+        "--------------------\n"
+        "_Gamble responsibly 18+ | StatiqFC x 90minWaffle_"
+    )
+    img_url = _get_team_image(home, away)
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        r = requests.post(url, json={
-            "chat_id": TELEGRAM_BETS_CHAT,
-            "text": msg,
-            "parse_mode": "Markdown"
-        }, timeout=15)
-        if r.status_code == 200:
-            log.info(f"Telegram bet alert sent")
+        if img_url:
+            url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendPhoto"
+            r = requests.post(url, json={"chat_id": TELEGRAM_BETS_CHANNEL, "photo": img_url, "caption": msg, "parse_mode": "Markdown"}, timeout=15)
         else:
-            log.error(f"Telegram error {r.status_code}: {r.text[:200]}")
+            url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage"
+            r = requests.post(url, json={"chat_id": TELEGRAM_BETS_CHANNEL, "text": msg, "parse_mode": "Markdown"}, timeout=15)
+        if r.status_code == 200:
+            log.info("Telegram bet alert: " + home + " vs " + away)
+        else:
+            log.error("Telegram error " + str(r.status_code))
     except Exception as e:
-        log.error(f"Telegram post failed: {e}")
+        log.error("Telegram post failed: " + str(e))
 
 def run_bet_alerts():
     log.info("=== Bet Alert Scanner starting ===")
+    if not _in_fixture_window():
+        log.info("  Outside fixture window - skipping")
+        return 0
     total_alerts = 0
-
-    for league_id in LEAGUE_IDS:
+    for league_id, league_name in LEAGUE_IDS.items():
         items = get_odds(league_id)
         for item in items:
             match = parse_match(item)
+            match["league"] = league_name
             outcomes = parse_odds(item)
             edges = find_edges(outcomes)
             for edge in edges:
                 guid = match["id"] + "_" + edge["selection"]
                 if already_alerted(guid):
                     continue
-                log.info(f"Edge found: {match['home_team']} vs {match['away_team']} — {edge['selection']} @ {edge['odds']} (+{edge['edge_pct']}%)")
+                log.info("Edge: " + match["home_team"] + " vs " + match["away_team"] + " - " + edge["selection"] + " @ " + str(edge["odds"]))
                 if post_discord(match, edge):
                     save_alert(guid, match, edge)
                     post_telegram(match, edge)
                     total_alerts += 1
-
-    log.info(f"=== Bet Alert Scanner done — {total_alerts} alerts sent ===")
+    log.info("=== Bet Alert Scanner done - " + str(total_alerts) + " alerts sent ===")
     return total_alerts
 
 if __name__ == "__main__":

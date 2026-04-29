@@ -36,6 +36,7 @@ FORMAT_LABEL = {
     "F6": "STAR SPOTLIGHT",
     "F7": "HOT TAKE",
     "F8": "TIPS AND BETS",
+    "F9": "WOMENS FOOTBALL",
 }
 
 LEAGUE_KEYWORDS = {

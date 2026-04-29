@@ -60,6 +60,7 @@ FORMAT_BADGE = {
     "F6": "⭐ STAR SPOTLIGHT",
     "F7": "🔥 HOT TAKE",
     "F8": "🎯 TIPS & BETS",
+    "F9": "👩 WOMENS FOOTBALL",
 }
 
 def build_news_message(story):

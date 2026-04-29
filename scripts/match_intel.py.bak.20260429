@@ -19,14 +19,8 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 SPORTS = [
-    ("soccer_epl",           "Premier League"),
-    ("soccer_efl_champ",     "Championship"),
-    ("soccer_germany_bundesliga", "Bundesliga"),
-    ("soccer_italy_serie_a", "Serie A"),
-    ("soccer_france_ligue_one", "Ligue 1"),
-    ("soccer_spain_la_liga", "La Liga"),
-    ("soccer_netherlands_eredivisie", "Eredivisie"),
-    ("soccer_portugal_primeira_liga", "Primeira Liga"),
+    ("soccer_epl",       "Premier League"),
+    ("soccer_efl_champ", "Championship"),
 ]
 
 def already_posted_today(key):
@@ -112,27 +106,10 @@ def build_odds_embed(matches, league_name):
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
-def _get_match_image(home, away):
-    """Get fanart/stadium image for the match."""
-    try:
-        import sys
-        sys.path.insert(0, "/root/90minwaffle/scripts")
-        from sportsdb_registry import find_team_in_text, best_team_image
-        team = find_team_in_text(f"{home} vs {away}")
-        if team:
-            return best_team_image(team)
-    except Exception:
-        pass
-    return None
-
-def post_discord(embed, home="", away=""):
+def post_discord(embed):
     if not DISCORD_BETS:
         log.error("No DISCORD_WEBHOOK_BETS configured")
         return False
-    # Add stadium/fanart image
-    img = _get_match_image(home, away)
-    if img:
-        embed["image"] = {"url": img}
     try:
         r = requests.post(DISCORD_BETS, json={"embeds": [embed]}, timeout=15)
         # Also fire to Telegram bets channel
@@ -177,10 +154,7 @@ def run_match_intel(force=False):
             log.warning(f"No odds data for {league_name}")
             continue
         embed = build_odds_embed(matches, league_name)
-        # Get first match home/away for image lookup
-        first_home = matches[0].get("home_team","") if matches else ""
-        first_away = matches[0].get("away_team","") if matches else ""
-        if embed and post_discord(embed, first_home, first_away):
+        if embed and post_discord(embed):
             mark_posted(db_key)
 
     log.info("=== Match Intel done ===")

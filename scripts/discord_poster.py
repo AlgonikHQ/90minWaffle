@@ -42,6 +42,7 @@ FORMAT_NAMES = {
     "F5": "TITLE RACE",
     "F6": "STAR SPOTLIGHT",
     "F7": "HOT TAKE",
+    "F9": "WOMENS FOOTBALL",
 }
 
 COLOUR_MAP = {
@@ -53,6 +54,7 @@ COLOUR_MAP = {
     "F6": 0x9B5DE5,  # purple — star spotlight
     "F7": 0xFF4500,  # red-orange — hot take
     "F8": 0x00B4D8,  # cyan — tips
+    "F9": 0xFF69B4,  # pink — women's football
 }
 
 def get_db():
@@ -60,12 +62,13 @@ def get_db():
 
 FORMAT_EMOJI = {
     "F1": "🚨", "F2": "📰", "F3": "⚽", "F4": "📊",
-    "F5": "🏆", "F6": "🌟", "F7": "🔥",
+    "F5": "🏆", "F6": "🌟", "F7": "🔥", "F9": "👩",
 }
 FORMAT_LABEL = {
     "F1": "CONFIRMED TRANSFER", "F2": "TRANSFER RUMOUR",
     "F3": "MATCH PREVIEW", "F4": "POST-MATCH",
     "F5": "TITLE RACE", "F6": "STAR SPOTLIGHT", "F7": "HOT TAKE",
+    "F9": "WOMENS FOOTBALL",
 }
 
 def _discord_relative_time(story):

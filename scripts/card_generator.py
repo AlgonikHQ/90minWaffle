@@ -30,9 +30,9 @@ WEBHOOKS = {
 }
 
 FORMAT_DISCORD = {"F1":"breaking_news","F2":"breaking_news","F3":"match_day","F4":"match_day","F5":"premier_league","F6":"general","F7":"hot_takes","F8":"tips"}
-FORMAT_EMOJI   = {"F1":"🚨","F2":"📰","F3":"⚽","F4":"📊","F5":"🏆","F6":"⭐","F7":"🔥","F8":"🎯"}
-FORMAT_LABEL   = {"F1":"CONFIRMED TRANSFER","F2":"TRANSFER RUMOUR","F3":"MATCH PREVIEW","F4":"POST-MATCH","F5":"TITLE RACE","F6":"STAR SPOTLIGHT","F7":"HOT TAKE","F8":"TIPS & BETS"}
-COLOUR_MAP     = {"F1":0x00FF87,"F2":0xE63946,"F3":0x4361EE,"F4":0xF77F00,"F5":0xFFD60A,"F6":0x7B2D8B,"F7":0xFF4500,"F8":0x00B4D8}
+FORMAT_EMOJI   = {"F1":"🚨","F2":"📰","F3":"⚽","F4":"📊","F5":"🏆","F6":"⭐","F7":"🔥","F8":"🎯","F9":"👩"}
+FORMAT_LABEL   = {"F1":"CONFIRMED TRANSFER","F2":"TRANSFER RUMOUR","F3":"MATCH PREVIEW","F4":"POST-MATCH","F5":"TITLE RACE","F6":"STAR SPOTLIGHT","F7":"HOT TAKE","F8":"TIPS & BETS","F9":"WOMENS FOOTBALL"}
+COLOUR_MAP     = {"F1":0x00FF87,"F2":0xE63946,"F3":0x4361EE,"F4":0xF77F00,"F5":0xFFD60A,"F6":0x7B2D8B,"F7":0xFF4500,"F8":0x00B4D8,"F9":0xFF69B4}
 
 def get_db(): return sqlite3.connect(DB_PATH)
 
@@ -141,6 +141,8 @@ def _route_channel(story):
 
     # 1. Tips
     if fmt == "F8": return "bets"
+    # 1b. Women's football — always general
+    if fmt == "F9": return "general"
     # 2. Championship
     if is_champ: return "championship"
     # 3. Confirmed transfer — breaking news
