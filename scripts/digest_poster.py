@@ -15,11 +15,20 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
     handlers=[logging.FileHandler(LOG_PATH), logging.StreamHandler()])
 log = logging.getLogger(__name__)
 
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-NEWS_CHANNEL = int(os.getenv("TELEGRAM_NEWS_CHANNEL", 0))
-DISCORD_PL = os.getenv("DISCORD_WEBHOOK_PREMIER_LEAGUE")
+BOT_TOKEN     = os.getenv("TELEGRAM_BOT_TOKEN")
+NEWS_CHANNEL  = int(os.getenv("TELEGRAM_NEWS_CHANNEL", 0))
+DISCORD_PL    = os.getenv("DISCORD_WEBHOOK_PREMIER_LEAGUE")
 DISCORD_CHAMP = os.getenv("DISCORD_WEBHOOK_CHAMPIONSHIP")
-DISCORD_GENERAL = os.getenv("DISCORD_WEBHOOK_GENERAL")
+DISCORD_GEN   = os.getenv("DISCORD_WEBHOOK_GENERAL")
+
+LEAGUES = [
+    {"comp": "PL",  "label": "Premier League",  "emoji": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "colour": 0x3D0059, "webhook": "PL",    "tg": True},
+    {"comp": "ELC", "label": "Championship",     "emoji": "🏟",        "colour": 0xF77F00, "webhook": "CHAMP", "tg": True},
+    {"comp": "BL1", "label": "Bundesliga",       "emoji": "🇩🇪",        "colour": 0xE8000D, "webhook": "GEN",   "tg": False},
+    {"comp": "SA",  "label": "Serie A",          "emoji": "🇮🇹",        "colour": 0x009246, "webhook": "GEN",   "tg": False},
+    {"comp": "FL1", "label": "Ligue 1",          "emoji": "🇫🇷",        "colour": 0x003189, "webhook": "GEN",   "tg": False},
+    {"comp": "PD",  "label": "La Liga",          "emoji": "🇪🇸",        "colour": 0xC60B1E, "webhook": "GEN",   "tg": False},
+]
 
 def get_db(): return sqlite3.connect(DB_PATH)
 
@@ -37,7 +46,7 @@ def mark_posted(key):
     try:
         conn = get_db(); c = conn.cursor()
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        c.execute("INSERT OR IGNORE INTO digest_log (key, posted_at) VALUES (?, datetime(\'now\'))", (key + "_" + today,))
+        c.execute("INSERT OR IGNORE INTO digest_log (key, posted_at) VALUES (?, datetime('now'))", (key + "_" + today,))
         conn.commit(); conn.close()
     except: pass
 
@@ -57,109 +66,113 @@ def get_scorers(comp, limit=5):
     if not d or "scorers" not in d: return []
     return d["scorers"][:limit]
 
-def form_emoji(form_str):
+def form_bar(form_str):
     if not form_str: return ""
-    mapping = {"W": "\u2705", "D": "\u26aa", "L": "\u274c"}
-    return " ".join(mapping.get(c, "\u26aa") for c in form_str[-5:])
+    mapping = {"W": "✅", "D": "🟡", "L": "❌"}
+    return " ".join(mapping.get(c, "⚪") for c in form_str[-5:])
 
-def build_pl_discord():
-    table = get_table("PL")
-    scorers = get_scorers("PL")
+def build_discord_embed(league):
+    comp   = league["comp"]
+    label  = league["label"]
+    emoji  = league["emoji"]
+    colour = league["colour"]
+    table  = get_table(comp)
     if not table: return None
+
     now = datetime.now(timezone.utc).strftime("%d %b %Y")
     rows = []
     for r in table[:6]:
-        pos = r["position"]
-        name = r["team"]["name"].replace(" FC", "").replace(" AFC", "")
-        pts = r["points"]
-        gd = r["goalDifference"]
+        pos   = r["position"]
+        name  = r["team"]["name"].replace(" FC","").replace(" AFC","")[:18]
+        pts   = r["points"]
+        gd    = r["goalDifference"]
         played = r["playedGames"]
-        form = form_emoji(r.get("form", ""))
-        rows.append(f"`{pos:2}` **{name}** — `{pts}pts` GD:{gd:+d} P:{played}  {form}")
-    table_str = "\n".join(rows)
-    scorer_rows = []
-    for i, s in enumerate(scorers, 1):
-        pname = s["player"]["name"]
-        tname = s["team"]["shortName"] if "shortName" in s["team"] else s["team"]["name"].replace(" FC","")
-        goals = s["goals"]
-        scorer_rows.append(f"`{i}.` {pname} ({tname}) — `{goals} goals`")
-    scorer_str = "\n".join(scorer_rows)
-    embed = {
-        "author": {"name": "\U0001f3c6  PREMIER LEAGUE STANDINGS"},
-        "title": "Top 6 — " + now,
-        "description": table_str,
-        "color": 0x3D0059,
-        "fields": [
-            {"name": "\U0001f45f Top Scorers", "value": scorer_str, "inline": False}
-        ],
-        "footer": {"text": "90minWaffle • Football. Hot takes. No filter. | twitter.com/90minwaffle"},
+        form  = form_bar(r.get("form",""))
+        rows.append("`" + str(pos).rjust(2) + "` **" + name + "** — `" + str(pts) + "pts` GD:" + ("{:+d}".format(gd)) + " P:" + str(played) + "  " + form)
+
+    fields = [{"name": "Top 6", "value": chr(10).join(rows), "inline": False}]
+
+    # Add top scorers for PL and ELC
+    if comp in ("PL","ELC"):
+        scorers = get_scorers(comp)
+        if scorers:
+            sc_lines = []
+            for i, s in enumerate(scorers, 1):
+                pname = s["player"]["name"]
+                goals = s["goals"]
+                sc_lines.append("`" + str(i) + ".` " + pname + " — `" + str(goals) + " goals`")
+            fields.append({"name": "⚽ Top Scorers", "value": chr(10).join(sc_lines), "inline": False})
+
+    # Title race callout for PL
+    if comp == "PL" and len(table) >= 2:
+        leader = table[0]; second = table[1]
+        gap = leader["points"] - second["points"]
+        gl  = 38 - leader["playedGames"]
+        callout = (
+            "**" + leader["team"]["name"].replace(" FC","") + "** lead by **" + str(gap) + " pts** "
+            "with " + str(gl) + " games left."
+        )
+        fields.append({"name": "🏆 Title Race", "value": callout, "inline": False})
+
+    return {
+        "author": {"name": emoji + "  " + label.upper() + " STANDINGS — " + now},
+        "color": colour,
+        "fields": fields,
+        "footer": {"text": "90minWaffle • Football. Hot takes. No filter. | @90minWaffle"},
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
-    return embed
 
-def build_champ_discord():
-    table = get_table("ELC")
-    if not table: return None
-    now = datetime.now(timezone.utc).strftime("%d %b %Y")
-    rows = []
-    for r in table[:6]:
-        pos = r["position"]
-        name = r["team"]["name"].replace(" FC", "").replace(" AFC", "")
-        pts = r["points"]
-        gd = r["goalDifference"]
-        played = r["playedGames"]
-        form = form_emoji(r.get("form", ""))
-        rows.append(f"`{pos:2}` **{name}** — `{pts}pts` GD:{gd:+d} P:{played}  {form}")
-    table_str = "\n".join(rows)
-    embed = {
-        "author": {"name": "\U0001f3df  CHAMPIONSHIP STANDINGS"},
-        "title": "Top 6 + Form — " + now,
-        "description": table_str,
-        "color": 0xF77F00,
-        "footer": {"text": "90minWaffle • Football. Hot takes. No filter. | twitter.com/90minwaffle"},
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
-    return embed
-
-def build_telegram_table(comp, label, emoji):
+def build_telegram_digest(league):
+    comp  = league["comp"]
+    label = league["label"]
+    emoji = league["emoji"]
     table = get_table(comp)
     if not table: return None
+
     now = datetime.now(timezone.utc).strftime("%d %b %Y")
-    lines = [emoji + " *" + label + " — Top 6*", "_" + now + "_", ""]
+    lines = [emoji + " *" + label + " Standings*", "_" + now + "_", ""]
+
     for r in table[:6]:
-        pos = r["position"]
+        pos  = r["position"]
         name = r["team"]["name"].replace(" FC","").replace(" AFC","")
-        pts = r["points"]
-        gd = r["goalDifference"]
-        lines.append(str(pos) + ". *" + name + "* — " + str(pts) + "pts (GD " + ("{:+d}".format(gd)) + ")")
+        pts  = r["points"]
+        gd   = r["goalDifference"]
+        form = form_bar(r.get("form",""))
+        lines.append(str(pos) + ". *" + name + "* — " + str(pts) + "pts (GD " + ("{:+d}".format(gd)) + ") " + form)
+
     if comp == "PL":
         scorers = get_scorers("PL")
         if scorers:
-            lines += ["", "\U0001f45f *Top Scorers*"]
+            lines += ["", "⚽ *Top Scorers*"]
             for i, s in enumerate(scorers[:5], 1):
-                pname = s["player"]["name"]
-                goals = s["goals"]
-                lines.append(str(i) + ". " + pname + " — " + str(goals) + " goals")
-    lines += ["", "\u2501"*20, "\U0001f426 @90minWaffle on X | \U0001f4fa YouTube | \U0001f3b5 TikTok"]
-    return "\n".join(lines)
+                lines.append(str(i) + ". " + s["player"]["name"] + " — " + str(s["goals"]) + " goals")
+        if len(table) >= 2:
+            gap = table[0]["points"] - table[1]["points"]
+            gl  = 38 - table[0]["playedGames"]
+            lines += ["", "🏆 *" + table[0]["team"]["name"].replace(" FC","") + "* lead by *" + str(gap) + "pts* with " + str(gl) + " games left"]
 
-def post_discord_embed(webhook, embed):
-    if not webhook: return False
+    lines += ["", "━━━━━━━━━━━━━━━━━━━━", "📺 @90minWaffle | YouTube | TikTok"]
+    return chr(10).join(lines)
+
+def post_discord(webhook_url, embed):
+    if not webhook_url: return False
     try:
-        r = requests.post(webhook, json={"embeds": [embed]}, timeout=15)
+        r = requests.post(webhook_url, json={"embeds": [embed]}, timeout=15)
         return r.status_code in (200, 204)
     except Exception as e:
-        log.error("Discord post failed: " + str(e)); return False
+        log.error("Discord digest failed: " + str(e)); return False
 
-async def post_telegram_digest(text, buttons=None):
+async def post_telegram(text):
     if not NEWS_CHANNEL or not BOT_TOKEN: return False
     try:
         bot = Bot(token=BOT_TOKEN)
-        markup = None
-        if buttons:
-            keyboard = [buttons]
-            markup = InlineKeyboardMarkup(keyboard)
-        await bot.send_message(chat_id=NEWS_CHANNEL, text=text, parse_mode=ParseMode.MARKDOWN, reply_markup=markup)
+        buttons = [
+            InlineKeyboardButton("🐦 @90minWaffle", url="https://twitter.com/90minwaffle"),
+            InlineKeyboardButton("📺 YouTube", url="https://youtube.com/@90minwaffle"),
+        ]
+        markup = InlineKeyboardMarkup([buttons])
+        await bot.send_message(chat_id=NEWS_CHANNEL, text=text,
+            parse_mode=ParseMode.MARKDOWN, reply_markup=markup)
         return True
     except Exception as e:
         log.error("Telegram digest failed: " + str(e)); return False
@@ -168,35 +181,31 @@ async def run_digest():
     log.info("=== Digest Poster starting ===")
     sent = 0
 
-    if not already_posted_today("pl_standings"):
-        embed = build_pl_discord()
-        if embed and post_discord_embed(DISCORD_PL, embed):
-            log.info("  PL standings posted to Discord")
-            mark_posted("pl_standings")
-            sent += 1
-        tg_text = build_telegram_table("PL", "Premier League", "\U0001f3c6")
-        if tg_text:
-            buttons = [
-                InlineKeyboardButton("\U0001f426 @90minWaffle", url="https://twitter.com/90minwaffle"),
-                InlineKeyboardButton("\U0001f4fa YouTube", url="https://youtube.com/@90minwaffle"),
-                InlineKeyboardButton("\U0001f3b5 TikTok", url="https://tiktok.com/@90minwaffle")
-            ]
-            await post_telegram_digest(tg_text, buttons)
+    webhook_map = {
+        "PL":    DISCORD_PL,
+        "CHAMP": DISCORD_CHAMP,
+        "GEN":   DISCORD_GEN,
+    }
 
-    if not already_posted_today("champ_standings"):
-        embed = build_champ_discord()
-        if embed and post_discord_embed(DISCORD_CHAMP, embed):
-            log.info("  Championship standings posted to Discord")
-            mark_posted("champ_standings")
+    for league in LEAGUES:
+        key = "standings_" + league["comp"]
+        if already_posted_today(key):
+            log.info("  Already posted today: " + league["label"])
+            continue
+
+        embed = build_discord_embed(league)
+        webhook = webhook_map.get(league["webhook"])
+        if embed and post_discord(webhook, embed):
+            log.info("  Posted: " + league["label"] + " to Discord")
+            mark_posted(key)
             sent += 1
-        tg_text = build_telegram_table("ELC", "Championship", "\U0001f3df")
-        if tg_text:
-            buttons = [
-                InlineKeyboardButton("\U0001f426 @90minWaffle", url="https://twitter.com/90minwaffle"),
-                InlineKeyboardButton("\U0001f4fa YouTube", url="https://youtube.com/@90minwaffle"),
-                InlineKeyboardButton("\U0001f3b5 TikTok", url="https://tiktok.com/@90minwaffle")
-            ]
-            await post_telegram_digest(tg_text, buttons)
+
+        if league["tg"]:
+            tg_text = build_telegram_digest(league)
+            if tg_text:
+                await post_telegram(tg_text)
+
+        await asyncio.sleep(2)
 
     log.info("=== Digest done — " + str(sent) + " posted ===")
     return sent
