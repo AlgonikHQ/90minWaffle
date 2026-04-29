@@ -20,15 +20,15 @@ log = logging.getLogger(__name__)
 # ── Keyword signal lists ──────────────────────────────────────────────────────
 
 WOMENS_SIGNALS = [
-    "women", "woman", "wsl", "women's super league", "uwcl",
-    "women's champions league", "lionesses", "england women",
+    "wsl", "women's super league", "uwcl",
+    "women's champions league", "lionesses",
     "women's world cup", "women's euro", "weuros",
     "arsenal women", "chelsea women", "manchester city women",
     "manchester united women", "liverpool women", "tottenham women",
     "leicester women", "aston villa women", "brighton women",
     "everton women", "west ham women", "newcastle women",
     "barcelona femeni", "lyon women", "psg women",
-    "she", "her", "girls", "female football",
+    "female football", "women's football",
     "women's fa cup", "women's league cup", "conti cup",
     "millie bright", "leah williamson", "beth mead",
     "alex greenwood", "keira walsh", "ella toone",
@@ -36,6 +36,7 @@ WOMENS_SIGNALS = [
     "chloe kelly", "lauren james", "jess carter",
     "vivianne miedema", "sam kerr", "ada hegerberg",
     "aitana bonmati", "alexia putellas",
+    "women's team", "womens team", "women's side",
 ]
 
 HERE_WE_GO = [
