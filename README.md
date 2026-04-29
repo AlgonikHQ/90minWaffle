@@ -1,56 +1,66 @@
-# trading-stack
+# ⚽ 90minWaffle — Automated Football Media Network
 
-Transparent documentation of a live algo trading infrastructure — built in public by [@AlgonikHQ](https://x.com/AlgonikHQ).
-
-## What is this?
-
-This repo documents the engineering behind a fully automated, multi-strategy trading stack running 24/7 on a Hetzner VPS. The goal is simple: build toward financial independence at 45 through automated systems, and do it in public.
-
-Every system here is live and trading real capital. This repo shows the architecture, infrastructure, and risk framework — not the strategy logic (that stays closed source).
-
-## The Stack
-
-| System | Market | Status |
-|--------|--------|--------|
-| **OANDA Forex Bot** | FX — 9 pairs, M15 | 📄 Paper (go-live May 2026) |
-| **Solana Sniper** | Solana memecoins | 🟢 Live |
-| **OSC Scalper** | Established memecoins | 🟢 Live |
-| **StatiqFC** | Football edge alerts | 🟢 Live |
-
-## The Goal
-
-FIRE at 45 (2032). Target: ~£855,000.
-
-Four parallel automated income streams compound into a tax-efficient ISA flywheel:
-- Spread betting profits (tax-free under UK law) → ISA top-ups
-- ISA dividends eventually fund bot capital → salary removed from equation
-- Solana sniper + OSC scalper gains → crypto accumulation
-
-This repo is the engineering layer of that plan. Follow along on X at [@AlgonikHQ](https://x.com/AlgonikHQ).
-
-## What's Open vs Closed
-
-| Open (this repo) | Closed (private) |
-|-----------------|-----------------|
-| System architecture | Entry/exit signal logic |
-| Risk framework & position sizing | Indicator parameters & thresholds |
-| Session & filter rules | Backtests & forward test data |
-| Infrastructure & deployment | Live P&L beyond public Telegram |
-| Telegram alert structure | Strategy source code |
-
-## Infrastructure
-
-- **VPS:** Hetzner Ubuntu 24.04 (dedicated)
-- **Process management:** systemd services
-- **Languages:** Python 3
-- **Alerts:** Telegram bot (public + private channels per system)
-- **Remote access:** Termius (mobile), SCP/PowerShell (Windows)
-
-## Follow the Build
-
-- X: [@AlgonikHQ](https://x.com/AlgonikHQ)
-- Telegram alerts: linked per system in each folder
-
-*This is not financial advice. All systems trade real capital at real risk. Documentation shared for educational and transparency purposes only.*
+**90minWaffle** is a fully automated football content engine designed to deliver breaking‑news reactions, AI‑generated scripts, and YouTube Shorts within minutes of real‑world events.
 
 ---
+
+## 🚀 How It Works
+Every 60 minutes the bot runs an end‑to‑end content pipeline:
+
+1. Refreshes fixtures, standings & top scorers  
+2. Collects news from trusted RSS feeds  
+3. Scores stories for "postability" — transfers, manager moves, match previews, hot takes  
+4. Cross‑checks multiple sources → marks top stories as “shippable”  
+5. Auto‑generates branded cards and pushes to Discord + Telegram within seconds  
+6. Uses Claude for scriptwriting and hook selection  
+7. Generates voiceovers via ElevenLabs  
+8. Edits and renders Shorts with subtitles  
+9. Auto‑uploads to YouTube Shorts (+ manual posting to TikTok / Reels)
+
+---
+
+## 🧠 Engagement Automation
+Two Python services run alongside the main news cycle:
+
+- **`engagement_bot.py`** — daily polls (“Who wins tonight?”, “Rate this transfer”), guess‑the‑player games, and scheduled discussion prompts.  
+- **`interaction_bot.py`** — interactive slash‑commands (`/poll`, `/guess`) with real Discord buttons.
+
+Together, they turn Discord into a 24/7 football community.
+
+---
+
+## 🛠️ Stack
+`Python 3.12`  `APScheduler`  `nextcord`  `requests`  `sqlite3`  `discord.py (webhooks)`  
+`Claude API`  `ElevenLabs TTS`  `YouTube Data API v3`  `systemd`  `Hetzner VPS`
+
+---
+
+## 📂 Key Channels
+| Channel | Purpose |
+|----------|----------|
+| 📰 `#breaking-news` | instant feeds of verified stories |
+| ⚽ `#match-day` | live chat during fixtures |
+| 🔥 `#hot-takes` | daily debate threads |
+| 🧩 `#guess-the-player` | interactive games every noon |
+
+---
+
+## 🕹️ Automation Schedule
+| Time (UTC) | Task |
+|-------------|------|
+| 08:00 | standings + top‑scorers digest |
+| 09:00 | morning poll |
+| 12:00 | guess‑the‑player |
+| 15:00 | hot‑take debate |
+| 18:00 | match predictions |
+| 00:00 | summary + cleanup |
+
+---
+
+## 📡 Links
+X → [@90minWaffle](https://twitter.com/90minWaffle) • YouTube → [@90minWaffle](https://youtube.com/@90minWaffle) • TikTok → [@90minWaffle](https://tiktok.com/@90minWaffle)
+
+---
+
+**Built and maintained by [AlgonikHQ](https://github.com/AlgonikHQ)**  
+“Football news without delay — 90 minutes reduced to seconds.”
