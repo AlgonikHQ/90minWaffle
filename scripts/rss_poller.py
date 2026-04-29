@@ -27,10 +27,8 @@ RSS_SOURCES = [
     {"name": "Guardian Football",    "url": "https://www.theguardian.com/football/rss",                  "tier": 2},
     {"name": "ESPN FC",              "url": "https://www.espn.co.uk/espn/rss/football/news",             "tier": 2},
     {"name": "90min",                "url": "https://www.90min.com/feed",                                "tier": 2},
-    {"name": "Goal.com",             "url": "https://www.goal.com/feeds/en/news",                        "tier": 2},
     {"name": "Football365",          "url": "https://www.football365.com/feed",                          "tier": 2},
     {"name": "BBC Championship",     "url": "https://feeds.bbci.co.uk/sport/football/championship/rss.xml", "tier": 2},
-    {"name": "Transfermarkt",        "url": "https://www.transfermarkt.co.uk/rss/news",                  "tier": 3},
 ]
 
 def get_db():

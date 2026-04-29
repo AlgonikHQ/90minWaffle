@@ -239,12 +239,11 @@ async def step_podcast():
     except Exception as e:
         log.error(f"  Podcast PDF failed: {e}")
 
-def step_digest():
+async def step_digest():
     log.info("\u2501\u2501\u2501 STEP 10: Daily Digest \u2501\u2501\u2501")
     try:
-        import asyncio as _asyncio
         dg = import_module("digest_poster", "/root/90minwaffle/scripts/digest_poster.py")
-        sent = _asyncio.get_event_loop().run_until_complete(dg.run_digest())
+        sent = await dg.run_digest()
         log.info(f"  Digest posted: {sent}")
         return sent
     except Exception as e:
@@ -322,7 +321,7 @@ async def send_cycle_report(new_stories, shippable, scripted, produced, queued):
             f"🎬 Videos produced: `{produced}`\n"
             f"📤 Sent to queue: `{queued}`\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"_Next cycle in 1 hour_"
+            f"_Next cycle in 10 minutes_"
         )
         await qn.send_report(msg)
     except Exception as e:
@@ -353,7 +352,7 @@ async def run_cycle(script_limit=2, video_limit=2, force_digest=False, force_pod
 
     # Daily digest — standings + top scorers at 8am
     if datetime.now(timezone.utc).hour == 8 or force_digest:
-        step_digest()
+        await step_digest()
 
     # Podcast PDF — Sundays at 9am
     if (datetime.now(timezone.utc).weekday() == 6 and datetime.now(timezone.utc).hour == 9) or force_podcast:
@@ -425,6 +424,16 @@ async def run_loop(interval_minutes=10):
             shippable   = step_score()
             shippable  += step_corroborate()
 
+            # Also fire any existing shippable stories from previous cycles
+            conn = sqlite3.connect(DB_PATH)
+            existing = conn.execute(
+                "SELECT COUNT(*) FROM stories WHERE status='shippable' AND (notes IS NULL OR notes NOT LIKE '%card_sent%')"
+            ).fetchone()[0]
+            conn.close()
+            if existing > 0:
+                log.info("  %d existing shippable stories in queue" % existing)
+            shippable += existing
+
             if shippable > 0:
                 log.info("  %d new shippable - firing cards with %ds spacing" % (shippable, POST_SPACING_SECONDS))
                 cg = import_module("card_generator", "/root/90minwaffle/scripts/card_generator.py")
@@ -448,7 +457,7 @@ async def run_loop(interval_minutes=10):
 
             now_hour = datetime.now(timezone.utc).hour
             if now_hour == 8:
-                step_digest()
+                await step_digest()
             if datetime.now(timezone.utc).weekday() == 6 and now_hour == 9:
                 await step_podcast()
             if now_hour == 2:

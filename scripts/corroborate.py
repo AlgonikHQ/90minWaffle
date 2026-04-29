@@ -77,7 +77,7 @@ def apply_corroboration_bonus():
         new_score = min(100, story["score"] + 20)
         breakdown["multi_source"] = 20
         breakdown["total"] = new_score
-        status = "shippable" if new_score >= 65 else ("holding" if new_score >= 45 else "skipped")
+        status = "shippable" if new_score >= 45 else ("holding" if new_score >= 30 else "skipped")
         if status == "shippable":
             boosted += 1
             log.info(f"  🟢 [{new_score:3d}] {story['title'][:75]}")
