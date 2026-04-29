@@ -25,9 +25,19 @@ HERE_WE_GO = [
 ]
 
 TRANSFER_KEYWORDS = [
-    "transfer", "signing", "bid", "deal", "loan", "fee", "contract",
-    "extension", "release clause", "buy-out", "agent", "talks", "negotiations",
-    "move", "linked", "target", "interest", "approach", "offer"
+    "transfer", "signing", "bid", "loan fee", "transfer fee", "release clause",
+    "buy-out clause", "transfer talks", "transfer negotiations", "transfer target",
+    "transfer approach", "transfer offer", "signed for", "joins", "completes move",
+    "agrees deal", "agrees terms", "medical booked", "here we go"
+]
+
+# Non-transfer contexts that must NOT trigger F1/F2 even if transfer words appear
+TRANSFER_EXCLUSIONS = [
+    "retires", "retirement", "announces retirement", "hanging up",
+    "injury", "injured", "sacked", "appointed", "new manager", "manager of",
+    "nominated", "award", "podcast", "analysis", "opinion", "ranked",
+    "kit release", "kit revealed", "strip", "wage", "wages", "salary",
+    "contract extension", "new deal", "renews", "extends contract"
 ]
 
 TITLE_RACE_KEYWORDS = [
@@ -188,25 +198,74 @@ TIPS_KEYWORDS = [
 def detect_format(story, score):
     t = text(story).lower()
 
+    # F8 — Tips & Bets (highest priority)
     if contains_any(t, TIPS_KEYWORDS):
         return "F8"
-    if contains_any(t, HERE_WE_GO) and contains_any(t, TRANSFER_KEYWORDS):
+
+    # Retirement / personal news — never a transfer story
+    if contains_any(t, ["retires", "retirement", "announces retirement", "hanging up", "calling time"]):
+        return "F6"  # Star Spotlight
+
+    # Manager / coaching news
+    if contains_any(t, ["sacked", "appointed manager", "new manager", "head coach", "interim manager",
+                         "managerial", "takes charge", "named manager", "manager of the year",
+                         "manager of year", "nominated for"]):
+        return "F7"  # Hot Take
+
+    # Injury news
+    if contains_any(t, ["injured", "injury", "ruled out", "out for", "scan", "surgery",
+                         "fitness doubt", "doubt for", "limped off", "stretcher"]):
+        return "F6"  # Star Spotlight
+
+    # Kit / merchandise — not transfer
+    if contains_any(t, ["kit", "strip", "jersey", "shirt release", "unveiled", "badge", "crest"]):
+        return "F6"
+
+    # Award / stats / records
+    if contains_any(t, ["award", "nominated", "trophy", "golden boot", "ballon", "record", "broke a", "history"]):
+        return "F6"
+
+    # Podcast / analysis / opinion pieces
+    if contains_any(t, ["podcast", "analysis", "opinion", "column", "sacked in the morning",
+                         "the debate", "special report", "deep dive"]):
+        return "F7"
+
+    # F1 — Confirmed transfer (Here We Go + strong transfer signal, no exclusions)
+    is_excluded = contains_any(t, TRANSFER_EXCLUSIONS)
+    if not is_excluded and contains_any(t, HERE_WE_GO) and contains_any(t, TRANSFER_KEYWORDS):
         return "F1"
-    if contains_any(t, TRANSFER_KEYWORDS):
+
+    # F2 — Transfer rumour (strong transfer signal only, no exclusions)
+    if not is_excluded and contains_any(t, TRANSFER_KEYWORDS):
         return "F2"
-    if contains_any(t, ["preview", "prediction", "ahead of", "facing", "vs", "v "]):
+
+    # F3 — Match preview
+    if contains_any(t, ["preview", "prediction", "ahead of", "facing", "vs", "v ", "line-up", "lineup",
+                         "team news", "kick off", "kicks off", "build-up"]):
         return "F3"
-    if contains_any(t, ["reaction", "post-match", "full time", "full-time", "after the match", "beaten", "wins", "win over", "defeat"]):
+
+    # F4 — Post match
+    if contains_any(t, ["reaction", "post-match", "post match", "full time", "full-time",
+                         "after the match", "beaten", "wins", "win over", "defeat",
+                         "result", "final score", "highlights", "player ratings"]):
         return "F4"
+
+    # F5 — Title race / league table
     if contains_any(t, TITLE_RACE_KEYWORDS):
         return "F5"
+
+    # F6 — Star Spotlight
     if contains_any(t, STAR_SPOTLIGHT_KEYWORDS):
         return "F6"
+
+    # F7 — Hot Take / opinion
     if contains_any(t, HOT_TAKE_KEYWORDS):
         return "F7"
+
+    # Default — opinion/analysis for anything that doesn't fit neatly
     if score >= 45:
         return "F7"
-    return "F2"
+    return "F6"
 
 def confidence_colour(score):
     if score >= 65: return "green"
