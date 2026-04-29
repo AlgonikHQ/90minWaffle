@@ -18,16 +18,28 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-SPORTS = [
-    ("soccer_epl",           "Premier League"),
-    ("soccer_efl_champ",     "Championship"),
-    ("soccer_germany_bundesliga", "Bundesliga"),
-    ("soccer_italy_serie_a", "Serie A"),
-    ("soccer_france_ligue_one", "Ligue 1"),
-    ("soccer_spain_la_liga", "La Liga"),
+# Rotate through leagues to conserve Odds API quota (500/month free tier)
+# PL always + one European league rotating by day of month
+_ALL_SPORTS = [
+    ("soccer_epl",                    "Premier League"),
+    ("soccer_efl_champ",              "Championship"),
+    ("soccer_germany_bundesliga",     "Bundesliga"),
+    ("soccer_italy_serie_a",          "Serie A"),
+    ("soccer_france_ligue_one",       "Ligue 1"),
+    ("soccer_spain_la_liga",          "La Liga"),
     ("soccer_netherlands_eredivisie", "Eredivisie"),
     ("soccer_portugal_primeira_liga", "Primeira Liga"),
 ]
+
+def _get_todays_sports():
+    """PL always + 1 rotating league = 2 requests/day = ~60/month."""
+    from datetime import datetime
+    day = datetime.now().day
+    rotating = _ALL_SPORTS[1:]  # exclude PL
+    pick = rotating[day % len(rotating)]
+    return [_ALL_SPORTS[0], pick]
+
+SPORTS = _get_todays_sports()
 
 def already_posted_today(key):
     try:
@@ -60,23 +72,38 @@ def mark_posted(key):
 
 def get_odds(sport_key):
     try:
+        import sys
+        sys.path.insert(0, "/root/90minwaffle/scripts")
+        import odds_quota as oq
+        if not oq.can_spend(1):
+            s = oq.status()
+            log.warning("Odds API quota limit reached - remaining: " + str(s["remaining"]) + " budget: " + str(s["daily_budget"]))
+            return []
         r = requests.get(
-            f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/",
+            "https://api.the-odds-api.com/v4/sports/" + sport_key + "/odds/",
             params={
                 "apiKey": ODDS_API_KEY,
                 "regions": "uk",
                 "markets": "h2h",
                 "oddsFormat": "decimal",
             }, timeout=15)
+        # Always sync actual remaining from headers
+        if r.headers.get("x-requests-remaining"):
+            oq.sync_from_headers(r.headers.get("x-requests-remaining"))
+        else:
+            oq.spend(1)
         if r.status_code == 200:
             remaining = r.headers.get("x-requests-remaining", "?")
-            log.info(f"Odds API {sport_key}: {len(r.json())} matches, {remaining} requests remaining")
+            log.info("Odds API " + sport_key + ": " + str(len(r.json())) + " matches, " + str(remaining) + " requests remaining")
             return r.json()
+        elif r.status_code == 401:
+            log.warning("Odds API quota exhausted - skipping until reset")
+            return []
         else:
-            log.error(f"Odds API {r.status_code}: {r.text[:150]}")
+            log.error("Odds API " + str(r.status_code) + ": " + r.text[:150])
             return []
     except Exception as e:
-        log.error(f"Odds fetch failed: {e}")
+        log.error("Odds fetch failed: " + str(e))
         return []
 
 def build_odds_embed(matches, league_name):
