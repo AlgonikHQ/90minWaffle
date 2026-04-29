@@ -92,27 +92,86 @@ def build_telegram_buttons(story):
         keyboard.append(buttons)
     return InlineKeyboardMarkup(keyboard)
 
-def post_discord_card(story):
-    t = (story.get("title") or "").lower()
+def _route_channel(story):
+    """Single source of truth for Discord channel routing."""
+    t   = (story.get("title") or "").lower()
     src = story.get("source") or ""
-    comp = story.get("competition") or ""
     fmt = story.get("format", "F6")
 
-    # Championship detection — strict club list only, not "championship" keyword alone
-    championship_clubs = ["middlesbrough","sheffield united","sheffield wednesday","norwich","watford","preston","stoke","cardiff","swansea","west brom","hull city","bristol city","coventry","plymouth","blackburn","ipswich","queens park rangers","luton","derby","millwall","sunderland","leeds","burnley"]
-    is_champ = (src == "BBC Championship") or (comp == "ELC") or any(k in t for k in championship_clubs)
+    champ_clubs = [
+        "middlesbrough","sheffield united","sheffield wednesday","norwich",
+        "watford","preston","stoke","cardiff","swansea","west brom","hull",
+        "bristol city","coventry","plymouth","blackburn","ipswich","luton",
+        "derby","millwall","sunderland","leeds","burnley","oxford","portsmouth",
+        "qpr","queens park rangers"
+    ]
+    ucl_terms = [
+        "champions league","ucl","europa league","conference league",
+        "semi-final","quarter-final","second leg","first leg","aggregate"
+    ]
+    pl_clubs = [
+        "arsenal","manchester city","man city","liverpool","chelsea",
+        "tottenham","spurs","newcastle","aston villa","west ham","fulham",
+        "everton","brighton","crystal palace","brentford","wolves",
+        "nottingham forest","forest","bournemouth","manchester united","man utd"
+    ]
+    pl_narrative = [
+        "title race","title charge","top of the table","points clear",
+        "points behind","relegation battle","drop zone","staying up",
+        "top four","top 4","european spot","premier league title","prem title",
+        "golden boot","league leaders"
+    ]
+    kit_terms   = ["kit","strip","jersey","shirt release","third kit","home kit","away kit","vineyard","leaked kit"]
+    injury_terms= ["injur","surgery","ruled out","set to miss","facial","scan results","out for","fitness doubt"]
+    personal_terms = ["commercial","advert","beer ","campaign","retires","retirement","award","nominated","charity"]
+    wc_terms    = ["world cup","world cup 2026","squad announcement","nations league","international break","warm-up"]
+    confirmed   = ["here we go","confirmed","signs for","signed for","done deal","completes move","joins","unveiled","agrees deal","medical booked"]
+    rumour      = ["transfer","bid","loan fee","release clause","transfer target","transfer talks","transfer approach"]
 
-    # UCL / European content always goes to match_day not premier_league
-    ucl_terms = ["champions league", "ucl", "europa league", "conference league", "semi-final", "quarter-final", "second leg", "first leg", "aggregate"]
-    is_ucl = any(k in t for k in ucl_terms)
+    is_champ    = (src == "BBC Championship") or any(k in t for k in champ_clubs)
+    is_ucl      = any(k in t for k in ucl_terms)
+    is_pl_club  = any(k in t for k in pl_clubs)
+    is_pl_narr  = any(k in t for k in pl_narrative)
+    is_kit      = any(k in t for k in kit_terms)
+    is_injury   = any(k in t for k in injury_terms)
+    is_personal = any(k in t for k in personal_terms)
+    is_wc       = any(k in t for k in wc_terms)
+    is_confirmed= any(k in t for k in confirmed)
+    is_rumour   = any(k in t for k in rumour)
 
-    if is_champ:
-        channel_key = "championship"
-    elif is_ucl and fmt in ("F3", "F4"):
-        channel_key = "match_day"
-    else:
-        channel_key = FORMAT_DISCORD.get(fmt, "general")
-    webhook=WEBHOOKS.get(channel_key)
+    # 1. Tips
+    if fmt == "F8": return "bets"
+    # 2. Championship
+    if is_champ: return "championship"
+    # 3. Confirmed transfer — breaking news
+    if fmt in ("F1","F2") and is_confirmed: return "breaking_news"
+    # 4. Transfer rumour with PL club — breaking news
+    if fmt in ("F1","F2") and is_rumour and is_pl_club: return "breaking_news"
+    # 5. Transfer rumour without PL club — general
+    if fmt in ("F1","F2"): return "general"
+    # 6. Kit/personal/World Cup — general
+    if is_kit or is_personal or is_wc: return "general"
+    # 7. Injury — general
+    if is_injury: return "general"
+    # 8. UCL match content — match_day
+    if is_ucl and fmt in ("F3","F4"): return "match_day"
+    # 9. UCL other — breaking_news
+    if is_ucl and fmt in ("F1","F2"): return "breaking_news"
+    # 10. All other match previews/results — match_day
+    if fmt in ("F3","F4"): return "match_day"
+    # 11. PL title race/relegation — premier_league (PL clubs only)
+    if is_pl_narr and is_pl_club: return "premier_league"
+    # 12. Hot takes — hot_takes
+    if fmt == "F7": return "hot_takes"
+    # 13. Star spotlight with PL club — premier_league
+    if fmt == "F6" and is_pl_club and not is_kit and not is_injury: return "premier_league"
+    # 14. Everything else — general
+    return "general"
+
+
+def post_discord_card(story):
+    channel_key = _route_channel(story)
+    webhook = WEBHOOKS.get(channel_key)
     if not webhook: return False
     try:
         r=requests.post(webhook,json={"embeds":[build_discord_card(story)]},timeout=15)
