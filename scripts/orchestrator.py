@@ -109,9 +109,10 @@ def get_dynamic_video_cap():
         log.warning(f"  Dynamic cap failed: {e} — defaulting to 1")
         return 1
 
-DAILY_VIDEO_CAP = 3
-VIDEO_SCORE_GATE = 55
+DAILY_VIDEO_CAP = 1  # 1/day keeps ElevenLabs quota spread across full month
+VIDEO_SCORE_GATE = 55  # Only best content gets videos
 MIN_ELEVEN_CHARS = 500
+STALE_SCRIPT_HOURS = 48  # Clean up scripted stories older than this
 
 def videos_produced_today():
     """Count videos already produced today (UTC date)."""
@@ -119,15 +120,18 @@ def videos_produced_today():
         conn = get_db()
         c = conn.cursor()
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        # Use fetched_at as proxy — created_at backfilled from fetched_at
         c.execute("""
             SELECT COUNT(*) FROM stories
             WHERE video_path IS NOT NULL
-            AND date(updated_at) = ?
-        """, (today,))
+            AND (date(created_at) = ? OR date(fetched_at) = ?)
+            AND status IN ('video_ready','queued','published')
+        """, (today, today))
         count = c.fetchone()[0]
         conn.close()
         return count
-    except Exception:
+    except Exception as e:
+        log.warning(f"  videos_produced_today failed: {e}")
         return 0
 
 def step_video(limit=1):
