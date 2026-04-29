@@ -122,7 +122,7 @@ def _route_channel(story):
         "golden boot","league leaders"
     ]
     kit_terms   = ["kit","strip","jersey","shirt release","third kit","home kit","away kit","vineyard","leaked kit"]
-    injury_terms= ["injur","surgery","ruled out","set to miss","facial","scan results","out for","fitness doubt"]
+    injury_terms= ["injur","surgery","ruled out","set to miss","facial","scan results","out for","fitness doubt","return from","expected back","return before","fitness update","fitness boost","fitness concern","return to training","return to fitness"]
     personal_terms = ["commercial","advert","beer ","campaign","retires","retirement","award","nominated","charity"]
     wc_terms    = ["world cup","world cup 2026","squad announcement","nations league","international break","warm-up"]
     confirmed   = ["here we go","confirmed","signs for","signed for","done deal","completes move","joins","unveiled","agrees deal","medical booked"]

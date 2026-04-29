@@ -30,8 +30,8 @@ RSS_SOURCES = [
     {"name": "Football365",          "url": "https://www.football365.com/feed",                          "tier": 2},
     {"name": "BBC Championship",     "url": "https://feeds.bbci.co.uk/sport/football/championship/rss.xml", "tier": 2},
     {"name": "BBC European Football", "url": "https://feeds.bbci.co.uk/sport/football/european/rss.xml",      "tier": 1},
-    {"name": "GIVEMESPORT Football",  "url": "https://www.givemesport.com/feed/football/",                    "tier": 2},
-    {"name": "Goal.com Football",     "url": "https://www.goal.com/feeds/en/news",                            "tier": 2},
+    {"name": "Football Italia",       "url": "https://www.football-italia.net/rss.xml",                       "tier": 2},
+    {"name": "Planet Football",       "url": "https://www.planetfootball.com/feed/",                          "tier": 2},
     {"name": "Transfermarkt News",    "url": "https://www.transfermarkt.co.uk/aktuell/newsticker/news/1",     "tier": 2},
     {"name": "BBC World Cup",         "url": "https://feeds.bbci.co.uk/sport/football/world-cup/rss.xml",     "tier": 1},
 ]
