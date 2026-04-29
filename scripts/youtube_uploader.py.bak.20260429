@@ -173,19 +173,6 @@ def upload_video(story):
         video_id = response.get("id")
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         log.info(f"  ✅ Uploaded: {video_url}")
-
-        # Upload thumbnail if available
-        thumb_path = story.get("thumbnail_path")
-        if thumb_path and os.path.exists(thumb_path):
-            try:
-                youtube.thumbnails().set(
-                    videoId=video_id,
-                    media_body=MediaFileUpload(thumb_path, mimetype="image/jpeg")
-                ).execute()
-                log.info(f"  ✅ Thumbnail uploaded: {thumb_path}")
-            except Exception as e:
-                log.warning(f"  Thumbnail upload failed: {e}")
-
         return video_id
 
     except HttpError as e:

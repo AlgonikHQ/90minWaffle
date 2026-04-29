@@ -34,21 +34,16 @@ TRANSFER_KEYWORDS = [
 # Non-transfer contexts that must NOT trigger F1/F2 even if transfer words appear
 TRANSFER_EXCLUSIONS = [
     "retires", "retirement", "announces retirement", "hanging up",
-    "injury", "injured", "surgery", "facial", "ruled out", "scan",
-    "sacked", "appointed", "new manager", "manager of",
+    "injury", "injured", "sacked", "appointed", "new manager", "manager of",
     "nominated", "award", "podcast", "analysis", "opinion", "ranked",
-    "kit release", "kit revealed", "kit details", "kit leaked",
-    "strip", "jersey", "shirt", "wage", "wages", "salary",
-    "contract extension", "new deal", "renews", "extends contract",
-    "beer commercial", "commercial", "advert", "campaign",
-    "misses", "miss", "out for", "fitness doubt", "team bus",
-    "vineyard", "inspired", "leaked", "third kit", "home kit", "away kit"
+    "kit release", "kit revealed", "strip", "wage", "wages", "salary",
+    "contract extension", "new deal", "renews", "extends contract"
 ]
 
 TITLE_RACE_KEYWORDS = [
     "title race", "title charge", "title run", "title fight",
     "top of the table", "points clear", "points behind",
-    "decider", "title decider",
+    "run-in", "run in", "decider", "title decider",
     "golden boot", "top four", "top 4", "top-four",
     "european spot", "europa league spot", "champions league spot",
     "relegation battle", "relegation fight", "relegation zone",
@@ -285,16 +280,7 @@ def score_story(story, star_players):
         breakdown["star_player"] = 10
 
     # ── Title race / narrative ────────────────────────────────────────────────
-    # Only fire if genuine title/relegation narrative — not just "run-in" or generic league mention
-    title_race_strong = [
-        "title race", "title charge", "title fight", "top of the table",
-        "points clear", "points behind", "title decider", "golden boot",
-        "relegation battle", "relegation fight", "drop zone", "staying up",
-        "league leaders", "premier league title", "prem title",
-        "rangers", "celtic", "old firm", "scottish title", "spfl title",
-        "world cup squad", "world cup 2026", "nations league final", "squad announcement"
-    ]
-    if contains_any(t, title_race_strong):
+    if contains_any(t, TITLE_RACE_KEYWORDS):
         score += 10
         breakdown["title_race"] = 10
 
@@ -349,22 +335,13 @@ def detect_format(story, score):
     if contains_any(t, TIPS_KEYWORDS):
         return "F8"
 
-    # Hard exclusion check — these NEVER become F1 or F2 regardless of other signals
-    is_excluded = contains_any(t, TRANSFER_EXCLUSIONS)
-
     # F1 — Confirmed transfer (Here We Go signal + strict transfer keywords, no exclusions)
+    is_excluded = contains_any(t, TRANSFER_EXCLUSIONS)
     if not is_excluded and contains_any(t, HERE_WE_GO) and contains_any(t, TRANSFER_KEYWORDS):
         return "F1"
 
-    # F2 — Transfer rumour — only if not excluded AND no injury/kit/personal signals
-    injury_signals = ["injur", "surgery", "ruled out", "miss", "scan", "facial", "hospital"]
-    kit_signals = ["kit", "strip", "jersey", "shirt", "badge", "crest", "vineyard", "leaked"]
-    personal_signals = ["commercial", "advert", "beer", "campaign", "bus", "video"]
-    is_injury = any(s in t for s in injury_signals)
-    is_kit = any(s in t for s in kit_signals)
-    is_personal = any(s in t for s in personal_signals)
-
-    if not is_excluded and not is_injury and not is_kit and not is_personal and contains_any(t, TRANSFER_KEYWORDS):
+    # F2 — Transfer rumour (strict transfer keywords only, no ambiguous words)
+    if not is_excluded and contains_any(t, TRANSFER_KEYWORDS):
         return "F2"
 
     # F4 — Post-match result (check before preview — result pages often mention upcoming too)

@@ -485,11 +485,31 @@ def get_image_for_story(title: str, hook: str = "") -> Optional[str]:
 
     if team:
         names = extract_player_names(text)
+        # Try player image ONLY in the team mentioned in story
         for name in names:
             img = find_player_image(name, team["id"])
             if img:
                 return img
+        # No player found — return fanart/stadium not badge
         return best_team_image(team)
+
+    # No team detected — try player search across all teams
+    # but verify the player's current team matches the story context
+    names = extract_player_names(text)
+    for name in names:
+        # Search all teams for this player
+        for tid, team_data in _teams().items():
+            img = find_player_image(name, tid)
+            if img:
+                # Verify team name appears in story text
+                team_name = _normalize(team_data.get("canonical", ""))
+                if any(a and _normalize(a) in _normalize(text)
+                       for a in team_data.get("aliases", [])):
+                    return img
+        # No verified match — try legacy search as last resort
+        img = _legacy_player_search(name)
+        if img:
+            return img
 
     # No team detected — last-ditch player search via TheSportsDB's own
     # search endpoint. Used for non-club content (e.g. "Cristiano Ronaldo").

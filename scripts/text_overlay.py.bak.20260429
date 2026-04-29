@@ -166,29 +166,26 @@ def build(groups, hook, cta, duration, fmt="F2", title=""):
     parts.append(f"drawbox=x=0:y=0:w={W}:h=90:color=black@0.90:t=fill")
     parts.append(f"drawbox=x=0:y=87:w={W}:h=3:color={RED}:t=fill")
 
-    # Brand name — bigger, yellow dot accent
+    # Brand name
     parts.append(
-        f"drawbox=x=16:y=22:w=8:h=8:color={YELLOW}:t=fill"
-    )
-    parts.append(
-        f"drawtext={f}text=90minWaffle:fontsize=44:fontcolor={WHITE}:"
-        f"x=32:y=18:shadowcolor=black:shadowx=3:shadowy=3"
+        f"drawtext={f}text=90minWaffle:fontsize=36:fontcolor={WHITE}:"
+        f"x=22:y=28:shadowcolor=black:shadowx=2:shadowy=2"
     )
 
     # League label (top left, below brand)
     parts.append(
         f"drawtext={f}text={safe(league, 22)}:fontsize=22:fontcolor={YELLOW}:"
-        f"x=32:y=66:shadowcolor=black:shadowx=1:shadowy=1"
+        f"x=22:y=60:shadowcolor=black:shadowx=1:shadowy=1"
     )
 
-    # Format badge (top right) — bolder pill
+    # Format badge (top right)
     badge = safe(fmt_label, 18)
     parts.append(
-        f"drawbox=x=680:y=8:w=388:h=38:color={RED}@0.95:t=fill"
+        f"drawbox=x=700:y=10:w=360:h=32:color={RED}@0.90:t=fill"
     )
     parts.append(
-        f"drawtext={f}text={badge}:fontsize=24:fontcolor={WHITE}:"
-        f"x=874-text_w/2:y=15:shadowcolor=black:shadowx=2:shadowy=2"
+        f"drawtext={f}text={badge}:fontsize=20:fontcolor={WHITE}:"
+        f"x=880-text_w/2:y=18:shadowcolor=black:shadowx=1:shadowy=1"
     )
 
     # ── HOOK TITLE (0 → hook_end) ────────────────────────────────────────────
@@ -198,17 +195,15 @@ def build(groups, hook, cta, duration, fmt="F2", title=""):
 
     if line1:
         parts.append(
-            f"drawtext={f}text={line1}:fontsize=86:fontcolor={YELLOW}:"
+            f"drawtext={f}text={line1}:fontsize=82:fontcolor={YELLOW}:"
             f"x=(1080-text_w)/2:y=800:"
-            f"bordercolor=black:borderw=4:"
             f"shadowcolor=black:shadowx=6:shadowy=6:"
             f"enable={bt(0, hook_end)}"
         )
     if line2:
         parts.append(
-            f"drawtext={f}text={line2}:fontsize=86:fontcolor={YELLOW}:"
-            f"x=(1080-text_w)/2:y=900:"
-            f"bordercolor=black:borderw=4:"
+            f"drawtext={f}text={line2}:fontsize=82:fontcolor={YELLOW}:"
+            f"x=(1080-text_w)/2:y=892:"
             f"shadowcolor=black:shadowx=6:shadowy=6:"
             f"enable={bt(0, hook_end)}"
         )
@@ -237,12 +232,11 @@ def build(groups, hook, cta, duration, fmt="F2", title=""):
             f"drawbox=x=80:y=870:w=6:h=95:color={RED}:t=fill:"
             f"enable={bt(t0, t1)}"
         )
-        # Caption text — white with black border for max contrast
+        # Caption text
         parts.append(
-            f"drawtext={f}text={txt}:fontsize=92:fontcolor={WHITE}:"
-            f"x=(1080-text_w)/2:y=884:"
-            f"bordercolor=black:borderw=3:"
-            f"shadowcolor=black:shadowx=4:shadowy=4:"
+            f"drawtext={f}text={txt}:fontsize=88:fontcolor={WHITE}:"
+            f"x=(1080-text_w)/2:y=888:"
+            f"shadowcolor=black:shadowx=3:shadowy=3:"
             f"enable={bt(t0, t1)}"
         )
 
@@ -261,21 +255,12 @@ def build(groups, hook, cta, duration, fmt="F2", title=""):
         f"drawbox=x=0:y=1700:w={W}:h=3:color={RED}:t=fill"
     )
 
-    # SUBSCRIBE prompt — yellow, bold, above handles
+    # Social handles
     parts.append(
-        f"drawtext={f}text=SUBSCRIBE FOR DAILY FOOTBALL TAKES:"
-        f"fontsize=26:fontcolor={YELLOW}:"
-        f"x=(1080-text_w)/2:y=1715:"
-        f"bordercolor=black:borderw=2:"
-        f"shadowcolor=black:shadowx=2:shadowy=2"
-    )
-
-    # Red dot separators between social handles
-    parts.append(
-        f"drawtext={f}text=@90minWaffle  •  YouTube  •  TikTok:"
-        f"fontsize=28:fontcolor={WHITE}:"
-        f"x=(1080-text_w)/2:y=1755:"
-        f"shadowcolor=black:shadowx=2:shadowy=2"
+        f"drawtext={f}text=@90minWaffle  X  YouTube  TikTok:"
+        f"fontsize=26:fontcolor={WHITE}@0.60:"
+        f"x=(1080-text_w)/2:y=1860:"
+        f"shadowcolor=black:shadowx=1:shadowy=1"
     )
 
     # ── CTA (last 3.5s) ──────────────────────────────────────────────────────
@@ -389,29 +374,9 @@ def process_videos(limit=2):
 
         if apply_overlay(base, ap, out, hook_t, cta_t,
                          script=script, fmt=fmt or "F2", title=title or ""):
-
-            # Generate thumbnail from frame at 0.5s
-            thumb_path = out.replace("_overlay.mp4", "_thumb.jpg")
-            try:
-                thumb_result = subprocess.run(
-                    ["ffmpeg", "-y", "-ss", "0.5", "-i", out,
-                     "-vframes", "1", "-q:v", "2", thumb_path],
-                    capture_output=True, text=True
-                )
-                if thumb_result.returncode == 0 and os.path.exists(thumb_path):
-                    log.info(f"  Thumbnail: {thumb_path} ({os.path.getsize(thumb_path)//1024}KB)")
-                else:
-                    thumb_path = None
-            except Exception as e:
-                log.warning(f"  Thumbnail failed: {e}")
-                thumb_path = None
-
             conn = get_db()
             c    = conn.cursor()
-            if thumb_path:
-                c.execute("UPDATE stories SET video_path=?, thumbnail_path=?, status='queued' WHERE id=?", (out, thumb_path, sid))
-            else:
-                c.execute("UPDATE stories SET video_path=?, status='queued' WHERE id=?", (out, sid))
+            c.execute("UPDATE stories SET video_path=?, status='queued' WHERE id=?", (out, sid))
             conn.commit()
             conn.close()
             sent += 1
