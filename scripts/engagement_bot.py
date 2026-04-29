@@ -225,6 +225,45 @@ def post_monday_motivation():
     post(DISCORD_GENERAL, embed)
     log.info("monday_motivation posted: " + item["author"])
 
+def post_world_cup_countdown():
+    """Post daily World Cup countdown and fact."""
+    from datetime import date
+    wc_start = date(2026, 6, 11)
+    days_left = (wc_start - date.today()).days
+    if days_left < 0 or days_left > 90:
+        return
+    conn = get_db()
+    c = conn.cursor()
+    row = c.execute("""
+        SELECT id, content_json FROM engagement_content
+        WHERE content_type='world_cup_fact' AND active=1
+        AND (last_used IS NULL OR last_used NOT LIKE ?)
+        ORDER BY used_count ASC, last_used ASC LIMIT 1
+    """, (datetime.now(timezone.utc).strftime("%Y-%m-%d") + "%",)).fetchone()
+    conn.close()
+    if not row:
+        fact_text = "The 2026 World Cup kicks off June 11 in North America."
+    else:
+        item_id, item_json = row
+        fact = json.loads(item_json)
+        fact_text = fact.get("fact", "")
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("UPDATE engagement_content SET used_count=used_count+1, last_used=? WHERE id=?",
+                  (datetime.now(timezone.utc).isoformat(), item_id))
+        conn.commit()
+        conn.close()
+    embed = {
+        "author": {"name": "🌍  WORLD CUP 2026 COUNTDOWN"},
+        "title": str(days_left) + " days to go",
+        "description": "**" + fact_text + "**" + chr(10) + chr(10) + "Are you excited? Who wins it? 👇",
+        "color": 0xE63946,
+        "footer": {"text": "90minWaffle | USA Canada Mexico 2026"},
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    post(DISCORD_GENERAL, embed)
+    log.info("world_cup_countdown posted: " + str(days_left) + " days")
+
 def post_weekend_preview():
     if datetime.now(timezone.utc).weekday() not in (4, 5):
         return
@@ -250,6 +289,7 @@ scheduler.add_job(post_guess_player,     "cron", day_of_week="tue,thu",     hour
 scheduler.add_job(post_guess_answer,     "cron", day_of_week="tue,thu",     hour=19, minute=0)
 scheduler.add_job(post_weekend_preview,  "cron", day_of_week="fri,sat",     hour=10, minute=0)
 scheduler.add_job(post_monday_motivation,"cron", day_of_week="mon",         hour=7,  minute=30)
+scheduler.add_job(post_world_cup_countdown,"cron", hour=10, minute=30)
 
 if __name__ == "__main__":
     log.info("Engagement bot starting...")

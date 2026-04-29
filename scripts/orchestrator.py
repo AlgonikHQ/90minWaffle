@@ -438,6 +438,15 @@ async def run_loop(interval_minutes=10):
             if run_heavy:
                 step_data_refresh()
             new_stories = step_poll()
+            # Reddit poll on heavy cycles
+            try:
+                rp = import_module("reddit_poller", "/root/90minwaffle/scripts/reddit_poller.py")
+                reddit_new = rp.poll_all()
+                new_stories += reddit_new
+                if reddit_new:
+                    log.info(f"  Reddit: {reddit_new} new stories")
+            except Exception as e:
+                log.debug(f"  Reddit poll skipped: {e}")
             shippable   = step_score()
             shippable  += step_corroborate()
 
