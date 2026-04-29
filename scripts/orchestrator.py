@@ -124,9 +124,8 @@ def videos_produced_today():
         c.execute("""
             SELECT COUNT(*) FROM stories
             WHERE video_path IS NOT NULL
-            AND (date(created_at) = ? OR date(fetched_at) = ?)
-            AND status IN ('video_ready','queued','published')
-        """, (today, today))
+            AND date(queued_at) = ?
+        """, (today,))
         count = c.fetchone()[0]
         conn.close()
         return count
@@ -157,17 +156,31 @@ def step_video(limit=1):
 
         conn = get_db()
         c = conn.cursor()
+        # Exclude formats that make poor videos: podcasts, daily roundups, tips
+        excluded_formats = ("F8",)
+        excluded_keywords = ("podcast", "football daily", "gossip", "daily |", "weekly video")
         c.execute("""
             SELECT id, title, source, score, format, script
             FROM stories WHERE status='scripted'
             AND score >= ?
+            AND format NOT IN ('F8')
             ORDER BY score DESC LIMIT ?
-        """, (VIDEO_SCORE_GATE, effective_limit))
-        rows = c.fetchall()
+        """, (VIDEO_SCORE_GATE, effective_limit * 3))
+        all_rows = c.fetchall()
+        # Filter out weak content types
+        rows = []
+        for r in all_rows:
+            title_lower = r[1].lower()
+            if any(kw in title_lower for kw in excluded_keywords):
+                continue
+            rows = rows + [r]
+            if len(rows) >= effective_limit:
+                break
         conn.close()
 
         stories = [{"id":r[0],"title":r[1],"source":r[2],
                     "score":r[3],"format":r[4],"script":r[5]} for r in rows]
+
 
         if not stories:
             log.info(f"  No stories meet video gate (score≥{VIDEO_SCORE_GATE}) — cards will post instead")
