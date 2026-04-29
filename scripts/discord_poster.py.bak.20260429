@@ -45,14 +45,13 @@ FORMAT_NAMES = {
 }
 
 COLOUR_MAP = {
-    "F1": 0x00C853,  # bold green — confirmed
-    "F2": 0xE63946,  # red — rumour
-    "F3": 0x4361EE,  # blue — match day
-    "F4": 0xF77F00,  # orange — full time
-    "F5": 0xE9C46A,  # gold — visible on dark + light
-    "F6": 0x9B5DE5,  # purple — star spotlight
-    "F7": 0xFF4500,  # red-orange — hot take
-    "F8": 0x00B4D8,  # cyan — tips
+    "F1": 0x00FF87,
+    "F2": 0xE63946,
+    "F3": 0x4361EE,
+    "F4": 0xF77F00,
+    "F5": 0xFFD60A,
+    "F6": 0x7B2D8B,
+    "F7": 0xFF4500,
 }
 
 def get_db():
@@ -68,83 +67,32 @@ FORMAT_LABEL = {
     "F5": "TITLE RACE", "F6": "STAR SPOTLIGHT", "F7": "HOT TAKE",
 }
 
-def _discord_relative_time(story):
-    for field in ("published_at", "fetched_at"):
-        val = story.get(field)
-        if not val:
-            continue
-        try:
-            if val.endswith("Z"):
-                val = val[:-1] + "+00:00"
-            dt = datetime.fromisoformat(val).astimezone(timezone.utc)
-            delta = int((datetime.now(timezone.utc) - dt).total_seconds())
-            if delta < 60: return "just now"
-            elif delta < 3600: return f"{delta // 60}m ago"
-            elif delta < 86400: return f"{delta // 3600}h ago"
-            else: return f"{delta // 86400}d ago"
-        except Exception:
-            continue
-    return ""
-
 def build_embed(story):
-    fmt    = story.get("format", "F7")
-    score  = story.get("score", 0)
-    hook   = story.get("winning_hook") or story["title"]
-    caption = story.get("caption", "") or ""
-    script  = story.get("script", "") or ""
-    source  = story.get("source", "Unknown")
-    emoji  = FORMAT_EMOJI.get(fmt, "🔥")
-    label  = FORMAT_LABEL.get(fmt, "HOT TAKE")
-    reltime = _discord_relative_time(story)
-
-    # Description: script excerpt as body, hook as opener
-    body_lines = []
-    if script and len(script) > 30:
-        body_lines.append(script[:280] + ("..." if len(script) > 280 else ""))
-    elif hook != story["title"]:
-        body_lines.append(hook)
-
-    # Hashtags from caption — max 5
-    tags = [w for w in caption.split() if w.startswith("#")][:5]
-    hashtag_str = " ".join(tags)
+    fmt = story.get("format", "F7")
+    score = story.get("score", 0)
+    hook = story.get("winning_hook", story["title"])
+    caption = story.get("caption", "")
+    emoji = FORMAT_EMOJI.get(fmt, "🔥")
+    label = FORMAT_LABEL.get(fmt, "HOT TAKE")
 
     description = f"**{hook}**"
-    if body_lines:
-        description += f"\n\n{body_lines[0]}"
-    if hashtag_str:
-        description += f"\n\n{hashtag_str}"
-
-    # Author line: format + score + source + time
-    time_part = f" · {reltime}" if reltime else ""
-    author_name = f"{emoji}  {label}  ·  {score}/100  ·  {source}{time_part}"
+    if caption:
+        hashtags = " ".join([w for w in caption.split() if w.startswith("#")])
+        description += f"\n\n{hashtags}" if hashtags else ""
 
     embed = {
-        "author": {"name": author_name[:256]},
+        "author": {"name": f"{emoji} {label}"},
         "title": story["title"][:256],
         "description": description[:2048],
         "color": COLOUR_MAP.get(fmt, 0xE63946),
         "fields": [
-            {"name": "Format", "value": label, "inline": True},
-            {"name": "Score", "value": f"{score}/100", "inline": True},
-            {"name": "Source", "value": source, "inline": True},
+            {"name": "Source", "value": story.get("source", "Unknown"), "inline": True},
         ],
-        "footer": {"text": "90minWaffle • Football. Hot takes. No filter. | @90minWaffle"},
+        "footer": {"text": "90minWaffle • Football. Hot takes. No filter."},
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
     if story.get("url"):
         embed["url"] = story["url"]
-
-    # Image — try image_resolver
-    try:
-        import sys
-        sys.path.insert(0, "/root/90minwaffle/scripts")
-        from image_resolver import resolve_image
-        img = resolve_image(story)
-        if img:
-            embed["image"] = {"url": img}
-    except Exception:
-        pass
-
     return embed
 
 def post_to_discord(story, channel_key):

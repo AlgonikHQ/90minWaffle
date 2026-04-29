@@ -27,92 +27,13 @@ FORMAT_EMOJI = {
 
 def get_db(): return sqlite3.connect(DB_PATH)
 
-def _relative_time(story):
-    """Return '4 mins ago' style string from published_at or fetched_at."""
-    from datetime import datetime, timezone
-    for field in ("published_at", "fetched_at"):
-        val = story.get(field)
-        if not val:
-            continue
-        try:
-            if val.endswith("Z"):
-                val = val[:-1] + "+00:00"
-            dt = datetime.fromisoformat(val).astimezone(timezone.utc)
-            delta = int((datetime.now(timezone.utc) - dt).total_seconds())
-            if delta < 60:
-                return "just now"
-            elif delta < 3600:
-                return f"{delta // 60}m ago"
-            elif delta < 86400:
-                return f"{delta // 3600}h ago"
-            else:
-                return f"{delta // 86400}d ago"
-        except Exception:
-            continue
-    return ""
-
-FORMAT_BADGE = {
-    "F1": "🟢 CONFIRMED TRANSFER",
-    "F2": "🔴 TRANSFER RUMOUR",
-    "F3": "🔵 MATCH DAY",
-    "F4": "🟠 FULL TIME",
-    "F5": "🏆 TITLE RACE",
-    "F6": "⭐ STAR SPOTLIGHT",
-    "F7": "🔥 HOT TAKE",
-    "F8": "🎯 TIPS & BETS",
-}
-
 def build_news_message(story):
     fmt     = story.get("format", "F7")
-    caption = story.get("caption", "") or ""
-    source  = story.get("source", "") or ""
-    hook    = story.get("winning_hook", "") or story.get("title", "")
-    score   = story.get("score", 0)
-
-    badge   = FORMAT_BADGE.get(fmt, "🔥 HOT TAKE")
-    reltime = _relative_time(story)
-
-    # Split caption into body lines and hashtags
-    lines = [l.strip() for l in caption.split("\n") if l.strip()]
-    hashtags = " ".join(w for l in lines for w in l.split() if w.startswith("#"))
-    body_lines = [l for l in lines if not all(w.startswith("#") for w in l.split())]
-    body = " ".join(body_lines).replace(hashtags, "").strip()
-    # Strip inline hashtags from body
-    body = " ".join(w for w in body.split() if not w.startswith("#")).strip()
-
-    # Pull CTA question from caption
-    questions = [l for l in lines if "?" in l and not l.startswith("#")]
-    cta = questions[0][:80] if questions else ""
-
-    # Trim hashtags to top 5
-    tags = hashtags.split()[:5]
-    hashtag_line = " ".join(tags)
-
-    # Source + time footer
-    source_line = f"_{source}_" if not reltime else f"_{source} · {reltime}_"
-
-    # Build message
-    parts = [
-        f"*{badge}*",
-        "",
-        f"*{hook}*",
-    ]
-    if body and len(body) > 20:
-        parts += ["", body]
-    if cta:
-        parts += ["", f"⚡ {cta}"]
-    parts += [
-        "",
-        "━━━━━━━━━━━━━━━━━━━━",
-        source_line,
-    ]
-    if hashtag_line:
-        parts.append(hashtag_line)
-    parts += [
-        "",
-        "📺 YouTube  •  🐦 @90minWaffle  •  🎵 TikTok",
-    ]
-    return "\n".join(parts)
+    emoji   = FORMAT_EMOJI.get(fmt, "📰")
+    caption = story.get("caption", "")
+    source  = story.get("source", "")
+    hook    = story.get("winning_hook", "")
+    return f"{emoji} *{hook}*\n\n{caption}\n\n— {source}"
 
 # ── News channel (public) ─────────────────────────────────────────────────────
 def build_news_buttons(story):
