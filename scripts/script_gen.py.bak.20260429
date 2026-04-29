@@ -175,12 +175,6 @@ def save_script(story_id, result):
         winning_script_key = result.get("winning_script", "mainstream")
         winning_script = result.get(f"{winning_script_key}_angle", "")
 
-    if not winning_script or not winning_script.strip():
-        log.warning(f"  Empty script for story {story_id} — resetting to shippable")
-        c.execute("UPDATE stories SET status='shippable' WHERE id=?", (story_id,))
-        conn.commit(); conn.close()
-        return
-
     c.execute('''
         UPDATE stories SET
             hook_1 = ?,

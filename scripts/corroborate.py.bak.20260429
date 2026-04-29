@@ -36,28 +36,12 @@ def extract_entities(title):
     return {e for e in CLUBS + PLAYERS if e in t}
 
 def find_corroborated(stories):
-    import sqlite3 as _sq
-    conn = _sq.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT id, title, source FROM stories WHERE status IN ('shippable','published') AND score > 0")
-    anchor_rows = c.fetchall()
-    conn.close()
-    anchors = [{"id": r[0], "title": r[1], "source": r[2]} for r in anchor_rows]
     corroborated = set()
-    for s1 in stories:
-        e1 = extract_entities(s1["title"])
-        if not e1:
-            continue
-        for s2 in anchors:
-            if s1["source"] == s2["source"]:
-                continue
-            if e1 & extract_entities(s2["title"]):
-                corroborated.add(s1["id"])
-                break
     for s1, s2 in combinations(stories, 2):
         if s1["source"] == s2["source"]:
             continue
-        if extract_entities(s1["title"]) & extract_entities(s2["title"]):
+        shared = extract_entities(s1["title"]) & extract_entities(s2["title"])
+        if shared:
             corroborated.add(s1["id"])
             corroborated.add(s2["id"])
     return corroborated

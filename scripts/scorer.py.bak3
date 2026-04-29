@@ -48,7 +48,7 @@ TITLE_RACE_KEYWORDS = [
     "european spot", "europa league spot", "champions league spot",
     "relegation battle", "relegation fight", "relegation zone",
     "relegated", "drop zone", "survival", "staying up",
-    "league leaders", "premier league title", "prem title", "rangers", "celtic", "old firm", "ibrox", "parkhead", "scottish title", "spfl title", "world cup squad", "world cup 2026", "nations league final", "squad announcement"
+    "league leaders", "premier league title", "prem title"
 ]
 
 # UCL / European competition keywords — never title race
@@ -91,119 +91,22 @@ TABLOID_ONLY_SOURCES = ["The Sun", "Daily Mirror", "Daily Star", "Daily Mail"]
 
 LOWER_LEAGUE_SIGNALS = [
     "league one", "league two", "national league", "mls", "saudi pro league",
-    "conference league"
+    "conference league", "scottish premiership"
 ]
 
-# Exclude non-football noise — football/soccer ONLY allowed through
+# Exclude non-football noise from 90min / Sky general RSS
 NOISE_KEYWORDS = [
-    # ── Horse racing ──────────────────────────────────────────────────────────
-    "horse racing", "horse race", "horseracing", "racehorse", "thoroughbred",
-    "jockey", "trainer", "stallion", "filly", "gelding", "furlong",
-    "cheltenham", "ascot", "goodwood", "epsom", "newmarket", "kempton",
-    "sandown", "haydock", "leopardstown", "punchestown", "curragh",
-    "grand national", "royal ascot", "cheltenham festival", "gold cup",
-    "champion hurdle", "stayers hurdle", "arkle", "novices",
-    "prix de", "prix ganay", "breeders cup", "kentucky derby",
-    "odds on", "each way", "nap of the day", "racing tips",
-    "il etait temps", "daryz", "lady blanche", "dowman",
-
-    # ── Formula 1 / Motorsport ───────────────────────────────────────────────
-    "formula 1", "formula one", "f1 race", "f1 driver", "f1 team",
-    "grand prix", "gp race", "qualifying session", "sprint race",
-    "pole position", "fastest lap", "pit stop", "safety car",
-    "verstappen", "hamilton", "leclerc", "norris", "russell",
-    "alonso", "sainz", "perez", "piastri", "stroll", "tsunoda",
-    "red bull racing", "ferrari f1", "mercedes f1", "mclaren f1",
-    "aston martin f1", "williams f1", "alpine f1", "haas f1",
-    "fia", "motogp", "nascar", "indycar", "tour de france",
-    "miami gp", "monaco gp", "silverstone gp", "monza gp",
-    "wolff", "horner", "binotto", "cadillac f1",
-
-    # ── Cricket ───────────────────────────────────────────────────────────────
-    "cricket", "wicket", "wickets", "batting", "bowling figures",
-    "test match", "ashes", "the ashes", "ipl", "t20", "odi",
-    "test cricket", "county cricket", "one day international",
-    "spinner", "pacer", "century", "duck", "over", "innings",
-
-    # ── Rugby ─────────────────────────────────────────────────────────────────
-    "rugby union", "rugby league", "six nations", "rugby world cup",
-    "premiership rugby", "pro14", "pro12", "super rugby",
-    "try scored", "line out", "scrum", "ruck", "maul",
-    "fly half", "hooker", "prop forward", "lock forward",
-
-    # ── Tennis ───────────────────────────────────────────────────────────────
-    "tennis", "wimbledon", "us open tennis", "french open", "australian open",
-    "roland garros", "atp", "wta", "grand slam tennis",
-    "set point", "match point", "ace serve", "double fault",
-    "djokovic", "alcaraz", "sinner", "medvedev", "swiatek",
-
-    # ── Golf ─────────────────────────────────────────────────────────────────
-    "golf", "pga tour", "ryder cup", "masters golf", "the open golf",
-    "us open golf", "birdie", "eagle", "bogey", "par", "handicap",
-    "fairway", "bunker", "green", "caddie",
-    "mcilroy", "rory", "tiger woods", "scheffler", "hovland",
-
-    # ── Boxing / MMA / Combat ────────────────────────────────────────────────
-    "boxing", "boxer", "boxing match", "world title fight",
-    "heavyweight", "knockout blow", "ufc", "mma", "wrestling",
-    "fury", "joshua", "aj vs", "usyk", "canelo", "wilder",
-    "tyson", "ngannou", "conor mcgregor",
-
-    # ── American sports ──────────────────────────────────────────────────────
-    "nfl", "nba", "nhl", "mlb", "super bowl", "world series",
-    "playoffs nba", "playoffs nfl", "slam dunk", "three pointer",
-    "touchdown", "quarterback", "running back", "wide receiver",
-    "lebron", "steph curry", "lakers", "celtics", "warriors",
-    "patriots", "chiefs", "cowboys", "yankees", "dodgers",
-    "nuggets", "halfcourt", "mascot",
-
-    # ── Snooker / Darts ──────────────────────────────────────────────────────
-    "snooker", "o'sullivan", "ronnie o", "crucible", "world snooker",
-    "maximum break", "century break", "frame", "cue ball",
-    "darts", "treble 20", "bullseye", "oche", "van gerwen",
-    "gerwyn price", "michael smith darts", "luke littler",
-
-    # ── Athletics / Olympics / Cycling ───────────────────────────────────────
-    "athletics", "marathon", "sprinter", "100m", "long jump",
-    "javelin", "discus", "shot put", "decathlon", "heptathlon",
-    "olympics", "olympic games", "paralympics",
-    "cycling", "tour de france", "giro", "vuelta", "velodrome",
-    "triathlon", "swimming race", "gymnastics",
-
-    # ── Other sports ─────────────────────────────────────────────────────────
-    "basketball", "netball", "volleyball", "handball",
-    "ice hockey", "field hockey", "lacrosse", "squash",
-    "badminton", "table tennis", "polo", "equestrian",
-    "ski", "skiing", "snowboard", "biathlon",
-    "sailing", "rowing", "kayak", "canoe",
-
-    # ── Celebrity / Entertainment / Non-sports ───────────────────────────────
-    "celebrity", "dua lipa", "taylor swift", "beyonce", "kanye",
-    "oktoberfest", "ikea", "instagram filter", "tiktok trend",
-    "birthday party", "red carpet", "movie", "film review",
-    "tv show", "reality tv", "love island", "big brother",
-
-    # ── Sky Sports non-football filler ───────────────────────────────────────
-    "live on sky sports racing", "live on sky sports cricket",
-    "live on sky sports golf", "live on sky sports f1",
-    "more than the score", "sky sports news live",
-    "scottish football podcast", "fpl podcast", "racing podcast",
-    "today on sky sports racing", "today on sky sports golf",
-]
-
-# Football-positive signals — story must contain at least one to pass noise gate
-FOOTBALL_SIGNALS = [
-    "football", "soccer", "premier league", "championship", "league one",
-    "league two", "fa cup", "efl cup", "carabao cup", "champions league",
-    "europa league", "conference league", "world cup", "euros", "euro 2024",
-    "bundesliga", "la liga", "serie a", "ligue 1", "eredivisie",
-    "mls", "afcon", "copa america",
-    "goalkeeper", "striker", "midfielder", "winger", "defender",
-    "manager", "head coach", "transfer", "signing", "match", "goal",
-    "penalty", "free kick", "corner", "offside", "var", "red card",
-    "yellow card", "hat trick", "clean sheet", "assist",
-    "relegation", "promotion", "play-off", "fixture", "squad",
-    "pitch", "stadium", "fans", "supporter", "derby",
+    "marathon", "snooker", "cricket", "golf", "tennis", "rugby", "nfl",
+    "nba", "boxing", "formula 1", "formula one", "cycling", "olympics",
+    "kit leak", "boots", "adidas", "nike", "puma", "kappa", "shirt", "jersey",
+    "oktoberfest", "ikea", "instagram", "tiktok", "birthday", "celebrity",
+    "wicket", "wickets", "batting", "bowling figures", "test match", "ashes",
+    "o'sullivan", "ronnie", "crucible", "snooker world", "world snooker",
+    "fury", "joshua", "aj vs", "boxing match", "ufc", "mma", "darts",
+    "nascar", "motogp", "tour de france", "wimbledon", "six nations",
+    "super bowl", "world series", "dua lipa", "taylor swift", "celebrity",
+    "live on sky: ", "more than the score", "the most bizzare",
+    "capitals struggle", "ipl", "t20", "odi", "test cricket"
 ]
 
 FORMAT_MAP = {
@@ -245,9 +148,6 @@ def score_story(story, star_players):
     # ── Noise filter — hard disqualify ───────────────────────────────────────
     if contains_any(t, NOISE_KEYWORDS):
         return 0, {"disqualified": "noise/off-topic"}
-    # Must contain at least one football signal to proceed
-    if not contains_any(t, FOOTBALL_SIGNALS):
-        return 0, {"disqualified": "no football signal"}
 
     # ── Source tier ───────────────────────────────────────────────────────────
     tier = story.get("source_tier", 3)
@@ -283,11 +183,6 @@ def score_story(story, star_players):
     if contains_any(t, TITLE_RACE_KEYWORDS):
         score += 10
         breakdown["title_race"] = 10
-
-    # ── UCL / European competition boost ─────────────────────────────────────
-    if contains_any(t, UCL_KEYWORDS):
-        score += 10
-        breakdown["ucl_boost"] = 10
 
     # ── Negative: stale signals ───────────────────────────────────────────────
     if contains_any(t, STALE_SIGNALS):

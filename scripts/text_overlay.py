@@ -376,7 +376,7 @@ def process_videos(limit=2):
                          script=script, fmt=fmt or "F2", title=title or ""):
             conn = get_db()
             c    = conn.cursor()
-            c.execute("UPDATE stories SET video_path=? WHERE id=?", (out, sid))
+            c.execute("UPDATE stories SET video_path=?, status='queued' WHERE id=?", (out, sid))
             conn.commit()
             conn.close()
             sent += 1

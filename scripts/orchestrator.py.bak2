@@ -102,7 +102,7 @@ def get_dynamic_video_cap():
         days_left = max(1, (datetime.fromtimestamp(reset_ts, tz=timezone.utc) - datetime.now(timezone.utc)).days)
         chars_per_video = 850
         affordable = int(remaining / chars_per_video)
-        daily_cap = 1 if affordable > 0 else 0
+        daily_cap = 1 if affordable >= days_left else 0
         log.info(f"  ElevenLabs quota: {remaining} chars | {days_left} days left | affordable: {affordable} videos | daily cap: {daily_cap}")
         return daily_cap
     except Exception as e:
@@ -423,16 +423,6 @@ async def run_loop(interval_minutes=10):
             new_stories = step_poll()
             shippable   = step_score()
             shippable  += step_corroborate()
-
-            # Also fire any existing shippable stories from previous cycles
-            conn = sqlite3.connect(DB_PATH)
-            existing = conn.execute(
-                "SELECT COUNT(*) FROM stories WHERE status='shippable' AND (notes IS NULL OR notes NOT LIKE '%card_sent%')"
-            ).fetchone()[0]
-            conn.close()
-            if existing > 0:
-                log.info("  %d existing shippable stories in queue" % existing)
-            shippable += existing
 
             if shippable > 0:
                 log.info("  %d new shippable - firing cards with %ds spacing" % (shippable, POST_SPACING_SECONDS))
