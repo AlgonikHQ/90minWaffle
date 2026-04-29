@@ -200,7 +200,7 @@ def process_upload_queue(limit=3):
     conn = get_db(); c = conn.cursor()
     c.execute("""
         SELECT id, title, source, score, format,
-               winning_hook, script, caption, video_path
+               winning_hook, script, caption, video_path, thumbnail_path
         FROM stories
         WHERE status = 'queued'
         AND video_path IS NOT NULL
@@ -219,7 +219,7 @@ def process_upload_queue(limit=3):
         story = {
             "id": r[0], "title": r[1], "source": r[2],
             "score": r[3], "format": r[4], "winning_hook": r[5],
-            "script": r[6], "caption": r[7], "video_path": r[8]
+            "video_path": r[8], "thumbnail_path": r[9]
         }
 
         log.info(f"Processing: {story['title'][:60]}")
