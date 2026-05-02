@@ -8,6 +8,9 @@ import sys
 import sqlite3
 import logging
 import asyncio
+sys.path.insert(0, "/root/90minwaffle")
+from telegram_brain import TelegramOpsBrain
+brain = TelegramOpsBrain()
 import importlib.util
 from datetime import datetime, timezone
 from dotenv import load_dotenv
@@ -296,6 +299,13 @@ def step_discord():
             conn = get_db(); c = conn.cursor()
             c.execute("UPDATE stories SET notes='poll_sent' WHERE id=?", (ht[0],))
             conn.commit(); conn.close()
+        # Prediction game — post predictions for recent F3s, resolve pending F4s
+        try:
+            pg = import_module("prediction_game", "/root/90minwaffle/scripts/prediction_game.py")
+            pg.run_predictions(limit=3)
+            pg.resolve_pending_results()
+        except Exception as pe:
+            log.warning(f"  Prediction game failed (non-critical): {pe}")
         log.info(f"  Discord posted: {posted}")
         return posted
     except Exception as e:
@@ -366,6 +376,13 @@ async def run_cycle(script_limit=2, video_limit=2, force_digest=False, force_pod
 
     # Bet alerts — every cycle
     step_bet_alerts()
+
+    # Performance tracking — update view counts on heavy cycles
+    try:
+        pt = import_module("performance_tracker", "/root/90minwaffle/scripts/performance_tracker.py")
+        pt.update_views()
+    except Exception as e:
+        log.warning(f"  Performance tracking failed (non-critical): {e}")
 
     # Daily digest — standings + top scorers at 8am
     if datetime.now(timezone.utc).hour == 8 or force_digest:
@@ -438,15 +455,6 @@ async def run_loop(interval_minutes=10):
             if run_heavy:
                 step_data_refresh()
             new_stories = step_poll()
-            # Reddit poll on heavy cycles
-            try:
-                rp = import_module("reddit_poller", "/root/90minwaffle/scripts/reddit_poller.py")
-                reddit_new = rp.poll_all()
-                new_stories += reddit_new
-                if reddit_new:
-                    log.info(f"  Reddit: {reddit_new} new stories")
-            except Exception as e:
-                log.debug(f"  Reddit poll skipped: {e}")
             shippable   = step_score()
             shippable  += step_corroborate()
 

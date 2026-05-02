@@ -85,7 +85,9 @@ def fetch_scorers(comp="PL", limit=20, force=False):
 def refresh_all():
     log.info("=== Data refresh starting ===")
     success = 0; total = 0
-    for code in ["PL", "ELC", "CL"]:
+    # PL, ELC (Championship), CL (Champions League), SPL (Scottish Premiership)
+    # SPL API code: 2018 on football-data.org
+    for code in ["PL", "ELC", "CL", "SPL"]:
         total += 3
         if fetch_standings(code): success += 1
         time.sleep(7)
