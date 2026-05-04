@@ -34,27 +34,6 @@ except Exception as _e:
     log.warning(f"[brand] Could not load brand modules: {_e}")
 
 OUTRO_PATH  = "/root/90minwaffle/assets/outro_card.png"
-ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY","")
-
-def analyse_story_for_images(title, script):
-    """Use Claude to intelligently identify who/what should appear in video images."""
-    if not ANTHROPIC_KEY: return None
-    try:
-        import httpx as _httpx, json as _json
-        r = _httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model": "claude-sonnet-4-5", "max_tokens": 150,
-                  "messages": [{"role": "user", "content": f"Story: {title}\nScript: {script[:300]}\n\nReturn JSON only: {{\"primary_person\": \"full name or null\", \"team\": \"team name or null\", \"story_type\": \"player_news|manager_news|match_report|transfer|injury|death_illness|general\"}}"}]},
-            timeout=10
-        )
-        text = r.json()["content"][0]["text"].strip()
-        # Strip markdown code fences if present
-        text = text.replace("```json","").replace("```","").strip()
-        return _json.loads(text)
-    except Exception as _e:
-        log.warning(f"[claude] Image analysis failed: {_e}")
-        return None
 OUTRO_SECS  = 3
 COMPOSED_DIR = "/root/90minwaffle/composed"
 import os as _os
@@ -98,31 +77,14 @@ def get_sportsdb_images(story):
         team    = reg.find_team_in_text(text)
         team_id = team.get("id") if team else None
 
-        # 2. Claude-powered story analysis for intelligent image selection
-        analysis = analyse_story_for_images(title, story.get("script",""))
-        if analysis:
-            log.info(f"  [claude] Story type: {analysis.get('story_type')} | Person: {analysis.get('primary_person')} | Team: {analysis.get('team')}")
-            primary = analysis.get("primary_person")
-            team_hint = analysis.get("team") or (team.get("name","") if team else "")
-            if primary:
-                url = reg.search_person_image(primary, team_hint=team_hint)
-                if url and url not in images:
-                    images.append(url)
-                    log.info(f"  [claude] Primary person image found: {url[:60]}")
-
-        # Only use extracted names if Claude didn't find a primary person
-        if not images:
-            names = reg.extract_player_names(text)
-            # Filter out common false positives
-            skip = {"son", "kane", "jesus", "saint", "christian"}
-            names = [n for n in names if n.lower() not in skip]
-            for name in names[:3]:
-                team_name = team.get("name","") if team else ""
-                url = reg.search_person_image(name, team_hint=team_name)
-                if url and url not in images:
-                    images.append(url)
-                if len(images) >= 2:
-                    break
+        # 2. Try player images from roster
+        names = reg.extract_player_names(text)
+        for name in names[:3]:
+            url = reg.find_player_image(name, team_id)
+            if url and url not in images:
+                images.append(url)
+            if len(images) >= 2:
+                break
 
         # 3. Fill with team images — fanart/stadium first, badge last
         if team:
@@ -344,7 +306,7 @@ def get_dur(p):
     r=subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1",p],capture_output=True,text=True)
     try: return float(r.stdout.strip())
     except: return 60.0
-def assemble(story_id,clips,audio,hook="",script=""):
+def assemble(story_id,clips,audio):
     os.makedirs(OUTPUT_DIR,exist_ok=True)
     out=os.path.join(OUTPUT_DIR,f"video_{story_id}.mp4")
     dur=min(get_dur(audio),58.0); cdur=dur/len(clips)
@@ -380,7 +342,7 @@ def assemble(story_id,clips,audio,hook="",script=""):
                 frame_png = f"/tmp/wfl_frame_{story_id}.png"
                 subprocess.run(["ffmpeg","-y","-i",first_clip,"-vframes","1",frame_png],
                     capture_output=True)
-                composed_png = compose_frame(frame_png, f"frame_{story_id}.png", hook_text="", caption_text="")
+                composed_png = compose_frame(frame_png, f"frame_{story_id}.png")
                 # Overlay composed brand frame onto video
                 r2=subprocess.run(["ffmpeg","-y",
                     "-i","/tmp/wfl_raw_mixed.mp4",
@@ -454,30 +416,8 @@ def produce_video(story):
     audio=generate_voiceover(story["script"],sid)
     if not audio: return None
     clips=fetch_clips(story.get("format","F7"),sid,n=4,title=story.get("title",""))
-    video=assemble(sid,clips,audio,hook=story.get("hook",""),script=story.get("script","")) if clips else None
+    video=assemble(sid,clips,audio) if clips else None
     if video:
-        # Apply word-sync caption overlay
-        try:
-            import importlib.util as _ilu
-            _spec = _ilu.spec_from_file_location("to", "/root/90minwaffle/scripts/text_overlay.py")
-            _to = _ilu.module_from_spec(_spec)
-            _spec.loader.exec_module(_to)
-            audio_path = os.path.join(OUTPUT_DIR, f"voice_{sid}.mp3")
-            overlay_out = video.replace(".mp4", "_overlay.mp4")
-            result = _to.apply_overlay(
-                vp=video, ap=audio_path, out=overlay_out,
-                hook=story.get("hook", story.get("title","")).upper(),
-                cta="Follow @90minwaffle for daily football takes",
-                script=story.get("script",""),
-                fmt=story.get("format","F7"),
-                title=story.get("title","")
-            )
-            if result:
-                video = result
-                log.info(f"  Word-sync overlay applied: {result}")
-        except Exception as _oe:
-            log.warning(f"  text_overlay failed: {_oe}")
-
         conn=get_db(); c=conn.cursor()
         c.execute("UPDATE stories SET video_path=?,status=\'video_ready\' WHERE id=?",(video,sid))
         conn.commit(); conn.close()

@@ -21,46 +21,6 @@ BROLL_QUERIES_WOMEN={"F1":["women soccer players celebrating","female football s
 WOMEN_KEYWORDS=["women","wsl","nwsl","uwcl","lionesses","blackstenius","white","hemp","russo","kerr","harder","putellas","bonmati","womens","female","girls"]
 def get_db(): return sqlite3.connect(DB_PATH)
 
-# ── Brand compositor + hook generator ─────────────────────────────────────
-import sys as _sys
-_sys.path.insert(0, "/root/90minwaffle/scripts")
-try:
-    from brand_compositor import compose_frame
-    from hook_generator import generate_hook, is_tiktok_worthy, detect_series
-    BRAND_ENABLED = True
-    log.info("[brand] Compositor and hook generator loaded")
-except Exception as _e:
-    BRAND_ENABLED = False
-    log.warning(f"[brand] Could not load brand modules: {_e}")
-
-OUTRO_PATH  = "/root/90minwaffle/assets/outro_card.png"
-ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY","")
-
-def analyse_story_for_images(title, script):
-    """Use Claude to intelligently identify who/what should appear in video images."""
-    if not ANTHROPIC_KEY: return None
-    try:
-        import httpx as _httpx, json as _json
-        r = _httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model": "claude-sonnet-4-5", "max_tokens": 150,
-                  "messages": [{"role": "user", "content": f"Story: {title}\nScript: {script[:300]}\n\nReturn JSON only: {{\"primary_person\": \"full name or null\", \"team\": \"team name or null\", \"story_type\": \"player_news|manager_news|match_report|transfer|injury|death_illness|general\"}}"}]},
-            timeout=10
-        )
-        text = r.json()["content"][0]["text"].strip()
-        # Strip markdown code fences if present
-        text = text.replace("```json","").replace("```","").strip()
-        return _json.loads(text)
-    except Exception as _e:
-        log.warning(f"[claude] Image analysis failed: {_e}")
-        return None
-OUTRO_SECS  = 3
-COMPOSED_DIR = "/root/90minwaffle/composed"
-import os as _os
-_os.makedirs(COMPOSED_DIR, exist_ok=True)
-
-
 def check_eleven_quota():
     """Return remaining ElevenLabs characters, or 0 on error."""
     try:
@@ -98,31 +58,14 @@ def get_sportsdb_images(story):
         team    = reg.find_team_in_text(text)
         team_id = team.get("id") if team else None
 
-        # 2. Claude-powered story analysis for intelligent image selection
-        analysis = analyse_story_for_images(title, story.get("script",""))
-        if analysis:
-            log.info(f"  [claude] Story type: {analysis.get('story_type')} | Person: {analysis.get('primary_person')} | Team: {analysis.get('team')}")
-            primary = analysis.get("primary_person")
-            team_hint = analysis.get("team") or (team.get("name","") if team else "")
-            if primary:
-                url = reg.search_person_image(primary, team_hint=team_hint)
-                if url and url not in images:
-                    images.append(url)
-                    log.info(f"  [claude] Primary person image found: {url[:60]}")
-
-        # Only use extracted names if Claude didn't find a primary person
-        if not images:
-            names = reg.extract_player_names(text)
-            # Filter out common false positives
-            skip = {"son", "kane", "jesus", "saint", "christian"}
-            names = [n for n in names if n.lower() not in skip]
-            for name in names[:3]:
-                team_name = team.get("name","") if team else ""
-                url = reg.search_person_image(name, team_hint=team_name)
-                if url and url not in images:
-                    images.append(url)
-                if len(images) >= 2:
-                    break
+        # 2. Try player images from roster
+        names = reg.extract_player_names(text)
+        for name in names[:3]:
+            url = reg.find_player_image(name, team_id)
+            if url and url not in images:
+                images.append(url)
+            if len(images) >= 2:
+                break
 
         # 3. Fill with team images — fanart/stadium first, badge last
         if team:
@@ -344,7 +287,7 @@ def get_dur(p):
     r=subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1",p],capture_output=True,text=True)
     try: return float(r.stdout.strip())
     except: return 60.0
-def assemble(story_id,clips,audio,hook="",script=""):
+def assemble(story_id,clips,audio):
     os.makedirs(OUTPUT_DIR,exist_ok=True)
     out=os.path.join(OUTPUT_DIR,f"video_{story_id}.mp4")
     dur=min(get_dur(audio),58.0); cdur=dur/len(clips)
@@ -361,123 +304,17 @@ def assemble(story_id,clips,audio,hook="",script=""):
     with open(lp,"w") as f:
         for s in segs: f.write(f"file \'{s}\'\n")
     subprocess.run(["ffmpeg","-y","-f","concat","-safe","0","-i",lp,"-c","copy",cp],capture_output=True,text=True)
-    # ── Step 1: Mix audio onto concat video ──────────────────────────────
-    r=subprocess.run(["ffmpeg","-y","-i",cp,"-i",audio,"-t",str(dur),
-        "-c:v","libx264","-preset","fast","-crf","22",
-        "-c:a","aac","-b:a","192k","-pix_fmt","yuv420p","-shortest",
-        "/tmp/wfl_raw_mixed.mp4"],capture_output=True,text=True)
-    if r.returncode!=0:
-        log.error(f"  Audio mix failed: {r.stderr[-200:]}"); return None
-
-    # ── Step 2: Brand frame overlay via compositor ────────────────────
-    branded_out = "/tmp/wfl_branded_final.mp4"
-    if BRAND_ENABLED:
-        try:
-            # Get first broll frame as still for compositor (gets duotone+template)
-            first_clip = clips[0] if clips else None
-            if first_clip:
-                # Extract first frame from first clip as PNG
-                frame_png = f"/tmp/wfl_frame_{story_id}.png"
-                subprocess.run(["ffmpeg","-y","-i",first_clip,"-vframes","1",frame_png],
-                    capture_output=True)
-                composed_png = compose_frame(frame_png, f"frame_{story_id}.png", hook_text="", caption_text="")
-                # Overlay composed brand frame onto video
-                r2=subprocess.run(["ffmpeg","-y",
-                    "-i","/tmp/wfl_raw_mixed.mp4",
-                    "-i",composed_png,
-                    "-filter_complex",
-                    "overlay=0:0",
-                    "-c:v","libx264","-preset","fast","-crf","22",
-                    "-c:a","copy","-pix_fmt","yuv420p",
-                    branded_out],capture_output=True,text=True)
-                if r2.returncode!=0:
-                    log.warning(f"  Brand overlay failed, using raw: {r2.stderr[-100:]}")
-                    branded_out = "/tmp/wfl_raw_mixed.mp4"
-            else:
-                branded_out = "/tmp/wfl_raw_mixed.mp4"
-        except Exception as _be:
-            log.warning(f"  Brand compositor error: {_be}")
-            branded_out = "/tmp/wfl_raw_mixed.mp4"
-    else:
-        branded_out = "/tmp/wfl_raw_mixed.mp4"
-
-    # ── Step 3: Append outro card ─────────────────────────────────────
-    if BRAND_ENABLED and os.path.exists(OUTRO_PATH):
-        try:
-            outro_vid = "/tmp/wfl_outro.mp4"
-            subprocess.run(["ffmpeg","-y",
-                "-loop","1","-i",OUTRO_PATH,
-                "-f","lavfi","-i","anullsrc=r=44100:cl=stereo",
-                "-t",str(OUTRO_SECS),
-                "-c:v","libx264","-preset","fast","-crf","22",
-                "-c:a","aac","-ar","44100","-pix_fmt","yuv420p",
-                outro_vid],capture_output=True)
-            concat_list = "/tmp/wfl_final_list.txt"
-            with open(concat_list,"w") as _f:
-                _f.write(f"file '{branded_out}'\n")
-                _f.write(f"file '{outro_vid}'\n")
-            r3=subprocess.run(["ffmpeg","-y",
-                "-f","concat","-safe","0","-i",concat_list,
-                "-c","copy",out],capture_output=True,text=True)
-            if r3.returncode==0:
-                log.info(f"  Video+outro: {out} ({os.path.getsize(out)//1024}KB)")
-                return out
-            else:
-                log.warning(f"  Outro concat failed: {r3.stderr[-100:]}")
-        except Exception as _oe:
-            log.warning(f"  Outro error: {_oe}")
-
-    # Fallback — just copy branded (no outro)
-    import shutil
-    shutil.copy(branded_out, out)
-    log.info(f"  Video (no outro): {out} ({os.path.getsize(out)//1024}KB)")
-    return out
+    r=subprocess.run(["ffmpeg","-y","-i",cp,"-i",audio,"-t",str(dur),"-vf","drawtext=text=\'90minWaffle\':fontsize=42:fontcolor=white@0.8:x=40:y=50:shadowcolor=black:shadowx=2:shadowy=2","-c:v","libx264","-preset","fast","-crf","22","-c:a","aac","-b:a","192k","-pix_fmt","yuv420p","-shortest",out],capture_output=True,text=True)
+    if r.returncode==0:
+        log.info(f"  Video: {out} ({os.path.getsize(out)//1024}KB)"); return out
+    log.error(f"  Assembly failed: {r.stderr[-200:]}"); return None
 def produce_video(story):
     sid=story["id"]; log.info(f"=== Story {sid}: {story['title'][:60]} ===")
-
-    # ── Hook generation ───────────────────────────────────────────────
-    if BRAND_ENABLED:
-        try:
-            hook = generate_hook(story.get("title",""), story.get("script","")[:200])
-            story["hook"] = hook
-            log.info(f"  Hook: {hook!r}")
-            # TikTok filter
-            story["tiktok_ok"] = is_tiktok_worthy(story.get("title",""))
-            story["series"]    = detect_series(story.get("title",""))
-            if story["series"]:
-                log.info(f"  Series: {story['series']}")
-            if not story["tiktok_ok"]:
-                log.info(f"  TikTok filter: FAIL — X/Discord only")
-        except Exception as _he:
-            log.warning(f"  Hook generation failed: {_he}")
-
     audio=generate_voiceover(story["script"],sid)
     if not audio: return None
     clips=fetch_clips(story.get("format","F7"),sid,n=4,title=story.get("title",""))
-    video=assemble(sid,clips,audio,hook=story.get("hook",""),script=story.get("script","")) if clips else None
+    video=assemble(sid,clips,audio) if clips else None
     if video:
-        # Apply word-sync caption overlay
-        try:
-            import importlib.util as _ilu
-            _spec = _ilu.spec_from_file_location("to", "/root/90minwaffle/scripts/text_overlay.py")
-            _to = _ilu.module_from_spec(_spec)
-            _spec.loader.exec_module(_to)
-            audio_path = os.path.join(OUTPUT_DIR, f"voice_{sid}.mp3")
-            overlay_out = video.replace(".mp4", "_overlay.mp4")
-            result = _to.apply_overlay(
-                vp=video, ap=audio_path, out=overlay_out,
-                hook=story.get("hook", story.get("title","")).upper(),
-                cta="Follow @90minwaffle for daily football takes",
-                script=story.get("script",""),
-                fmt=story.get("format","F7"),
-                title=story.get("title","")
-            )
-            if result:
-                video = result
-                log.info(f"  Word-sync overlay applied: {result}")
-        except Exception as _oe:
-            log.warning(f"  text_overlay failed: {_oe}")
-
         conn=get_db(); c=conn.cursor()
         c.execute("UPDATE stories SET video_path=?,status=\'video_ready\' WHERE id=?",(video,sid))
         conn.commit(); conn.close()

@@ -62,7 +62,7 @@ async def send_queue_item(story):
     try:
         # Only send to Queue if a real video exists — no text fallback
         if not video_path or not os.path.exists(video_path):
-            log.info("  Queue skipped — no video available")
+            log.info("  No video file found — skipping")
             return None
         with open(video_path, "rb") as vf:
             sent = await bot.send_video(
@@ -115,7 +115,8 @@ async def process_queue():
         SELECT id, title, source, score, format,
                winning_hook, script, caption, video_path
         FROM stories
-        WHERE status IN ('video_ready', 'scripted')
+        WHERE status IN ('video_ready', 'queued')
+        AND video_path IS NOT NULL
         ORDER BY score DESC
         LIMIT 5
     """)
@@ -179,3 +180,13 @@ if __name__ == "__main__":
         asyncio.run(process_queue())
     else:
         print("No scripted stories found")
+
+# === TELEGRAM QUEUE + NEWS FORCE ===
+async def force_video_to_telegram(video_path, story_title):
+    try:
+        from telegram_poster import send_to_queue, send_to_news
+        await send_to_queue(video_path, story_title)
+        await send_to_news(video_path, story_title)
+        print(f"✅ Video sent to Queue + News Telegram: {story_title}")
+    except Exception as e:
+        print(f"Queue/ News send failed: {e}")

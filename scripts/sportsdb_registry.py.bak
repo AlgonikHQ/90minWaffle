@@ -343,54 +343,6 @@ def best_team_image(team: dict) -> Optional[str]:
     )
 
 
-def search_person_image(name: str, team_hint: str = "") -> Optional[str]:
-    """
-    Search for any football person by name — players, managers, legends, retired.
-    Tries strRender → strCutout → strThumb in order.
-    Handles active, retired, and manager roles.
-    When multiple results exist, picks the most relevant by:
-    - Matching team_hint if provided
-    - Preferring higher relevance score
-    - Preferring older/more famous person (earlier birth date for legends)
-    Works for: current players, retired players, managers (current/former),
-    legends, coaches, and named individuals in news stories.
-    """
-    import requests as _req
-    try:
-        r = _req.get(
-            f"{BASE}/searchplayers.php",
-            params={"p": name}, timeout=10
-        )
-        players = (r.json() or {}).get("player") or []
-        candidates = []
-        for p in players:
-            sport = (p.get("strSport") or "").lower()
-            if sport not in ("soccer", "football"):
-                continue
-            url = (p.get("strRender") or
-                   p.get("strCutout") or
-                   p.get("strThumb"))
-            if not url:
-                continue
-            relevance = float(p.get("relevance") or 0)
-            team = (p.get("strTeam") or "").lower()
-            born = p.get("dateBorn") or "9999"
-            # Boost relevance if team matches hint
-            if team_hint and team_hint.lower() in team:
-                relevance += 50
-            # Boost retired/legend players with high base relevance
-            if "_retired" in team or "retired" in team:
-                relevance += 10
-            candidates.append((relevance, born, url))
-        if candidates:
-            # Sort by relevance desc, then birth date asc (older = more famous legend)
-            candidates.sort(key=lambda x: (-x[0], x[1]))
-            return candidates[0][2]
-    except Exception as _e:
-        pass
-    return None
-
-
 def find_player_image(player_name: str, team_id: str) -> Optional[str]:
     """Find a player's best image by checking the team's cached roster.
 

@@ -127,6 +127,56 @@ TRANSFER_EXCLUSIONS = [
     "even if it helps", "despite", "boost rivals",
 ]
 
+# ── Gossip/speculation noise — skip entirely ─────────────────────────────────
+GOSSIP_NOISE_PATTERNS = [
+    r"saturday.s gossip", r"sunday.s gossip", r"monday.s gossip",
+    r"tuesday.s gossip", r"wednesday.s gossip", r"thursday.s gossip",
+    r"friday.s gossip", r"daily gossip", r"transfer gossip",
+    r"dream xi", r"dream team xi", r"dream starting xi",
+    r"predicted xi", r"predicted lineup", r"ideal xi",
+    r"best possible xi", r"perfect xi", r"ultimate xi",
+    r"how would .{3,30} fit", r"how could .{3,30} fit",
+    r"where would .{3,30} fit", r"could .{3,30} fit at",
+    r"what if .{3,30} signed", r"what would .{3,30} look like",
+    r"who should .{3,20} sign", r"can you name",
+    r"quiz:", r"quiz —", r"sportword", r"word game",
+    r"ranked:", r"ranking:", r"top 10 ", r"top 5 ",
+    r"looking back at", r"greatest ever", r"all-time xi",
+    r"remember when", r"throwback to", r"on this day in",
+    r"weekly round-up", r"week in review",
+    r"- saturday.s gossip", r"- friday.s gossip",
+]
+
+# ── Soft transfer signals — route F2 not F7 ────────────────────────────────
+SOFT_TRANSFER_SIGNALS = [
+    "on radar", "on the radar", "on barca radar", "on madrid radar",
+    "on city radar", "on united radar", "on arsenal radar",
+    "keeping tabs", "keeping close tabs", "monitoring closely",
+    "shares agent with", "same agent as", "represented by same",
+    "offered to", "has been offered", "been offered to",
+    "could return to", "could move to", "could leave for",
+    "open to move", "open to transfer", "considering a move",
+    "weighing up a move", "weighing a transfer",
+    "set to hold talks", "in talks over a move",
+    "price tag set at", "price tag of", "set price of",
+    "available for", "available this summer", "available in january",
+    "wants away from", "wants to leave", "pushing for a move",
+    "linked with a move", "linked to a move to",
+    "eyeing a move", "plotting a move",
+]
+
+# ── Profile/feature signals — these are F6 not F7 ──────────────────────────
+PROFILE_SIGNALS = [
+    r"the rise of", r"remarkable rise of", r"rise and rise of",
+    r"little.known", r"quietly making", r"flying under the radar",
+    r"the story of", r"the making of",
+    r"meet the", r"introducing the",
+    r"profile:", r"in profile", r"spotlight on",
+    r"the career of", r"journey of", r"path to the top",
+    r"from .{3,20} to the top", r"the kid who",
+    r"who is ", r"who exactly is",
+]
+
 TITLE_RACE_KEYWORDS = [
     "title race", "title charge", "title run", "title fight",
     "top of the table", "points clear", "points behind",
@@ -340,6 +390,12 @@ def score_story(story, star_players):
     if not contains_any(t, FOOTBALL_SIGNALS):
         return 0, {"disqualified": "no football signal"}
 
+    # Gossip/speculation noise — skip entirely, adds nothing to any channel
+    import re as _re
+    for pattern in GOSSIP_NOISE_PATTERNS:
+        if _re.search(pattern, t):
+            return 0, {"disqualified": f"gossip/speculation: {pattern}"}
+
     if contains_any(t, WOMENS_SIGNALS):
         score += 5
         breakdown["womens_football"] = 5
@@ -505,21 +561,36 @@ def detect_format(story, score):
     """Context-aware format detection — tight, channel-balanced routing.
 
     Priority order (highest to lowest):
-      F9 Women's → F8 Tips → F1 Confirmed transfer → F2 Transfer rumour →
-      F4 Post-match → F3 Preview → F5 Title race → F7 Hot take →
-      F6 Star spotlight → F7 default (not F6)
+      F9 Women's → F8 Tips → F1 Confirmed transfer → F2 Transfer rumour
+      (incl soft signals) → F4 Post-match → F3 Preview → F5 Title race
+      → F6 Profile/Star → F7 Hot take → F7 default
 
-    Key changes:
-      - F2 requires genuine transfer movement/interest + no exclusion
-        (gossip columns, "where are they now", dream XIs are excluded)
-      - F7 check BEFORE F6 — most stories are opinion/analysis/reaction
-      - F6 requires explicit performance/personal signal AND no opinion disqualifier
-      - Default is F7 not F6
+    Key changes v2:
+      - Gossip/speculation patterns now disqualified at score level
+      - Soft transfer signals (on radar, shares agent, price tag set)
+        now route F2 not F7
+      - Profile/feature pieces (rise of, remarkable rise, little-known)
+        now route F6 not F7
+      - F6 check moved BEFORE F7 for profile signals
+      - Women's league/relegation context added to F9 detection
+      - Default remains F7
     """
+    import re as _re
     t = text(story).lower()
 
+    # Expanded women's detection — catches "relegation play-off" in women's context
+    # by checking for women's competition name in title or source
+    source_lower = (story.get("source") or "").lower()
+
     # ── F9: Women's football ─────────────────────────────────────────────────
-    if contains_any(t, WOMENS_SIGNALS):
+    # Extended: catch women's competition context even without explicit WSL keyword
+    WOMENS_CONTEXT = [
+        "women", "womens", "wsl", "nwsl", "lionesses", "uwcl",
+        "women's super league", "women's champions", "women's fa cup",
+        "women's league cup", "conti cup", "women's world cup",
+        "women's euro", "fa wsl", "barclays wsl",
+    ]
+    if contains_any(t, WOMENS_SIGNALS) or contains_any(t, WOMENS_CONTEXT):
         return "F9"
 
     # ── F8: Tips & Bets — explicit odds/betting ONLY ─────────────────────────
@@ -538,8 +609,10 @@ def detect_format(story, score):
     # ── F2: Transfer rumour — requires real movement/interest signal ─────────
     # Gossip columns, dream XIs, "where are they now" are excluded above
     # Known transfer sources (Football Italia, Transfermarkt etc) get lower threshold
+    # Soft signals (on radar, shares agent, price tag) also route F2
     has_movement    = contains_any(t, TRANSFER_MOVEMENT)
     has_rumour      = contains_any(t, TRANSFER_RUMOUR)
+    has_soft        = contains_any(t, SOFT_TRANSFER_SIGNALS)
     is_transfer_src = story.get("source", "") in TRANSFER_SOURCES
     injury_block    = any(s in t for s in ["injur", "surgery", "ruled out", "facial", "hospital"])
     kit_block       = any(s in t for s in ["kit", "strip", "jersey", "shirt", "badge", "crest"])
@@ -547,6 +620,9 @@ def detect_format(story, score):
     if not is_excluded and not injury_block and not kit_block:
         # Known transfer source: single rumour signal is enough
         if is_transfer_src and has_rumour:
+            return "F2"
+        # Soft transfer signals — market links, agent sharing, price tags set
+        if has_soft and not is_excluded:
             return "F2"
         # Any source: movement signal or 2+ rumour signals
         if has_movement or (has_rumour and count_matching(t, TRANSFER_RUMOUR) >= 2):
@@ -570,24 +646,29 @@ def detect_format(story, score):
     if contains_any(t, TITLE_RACE_KEYWORDS) and not contains_any(t, UCL_KEYWORDS):
         return "F5"
 
-    # ── F7: Hot Take — BEFORE F6 ─────────────────────────────────────────────
-    # Most football stories are opinion, analysis, reaction or quotes.
-    # Check this before star spotlight to prevent F6 bloat.
+    # ── F6: Profile/Feature — check BEFORE F7 ───────────────────────────────
+    # "The rise of X", "little-known X", "the story of X" — profile pieces
+    # These contain HOT_TAKE_SIGNALS (says, reveals) but are fundamentally
+    # feature writing about a player/manager, not opinion/reaction.
+    import re as _re2
+    is_profile = any(_re2.search(p, t) for p in PROFILE_SIGNALS)
+    has_spotlight   = contains_any(t, STAR_SPOTLIGHT_SIGNALS)
+    has_disqualifier = contains_any(t, F6_DISQUALIFIERS)
+
+    if is_profile and not has_disqualifier:
+        return "F6"
+
+    if has_spotlight and not has_disqualifier:
+        return "F6"
+
+    # ── F7: Hot Take ──────────────────────────────────────────────────────────
+    # Opinion, analysis, manager news, quotes, reaction — comes AFTER F6 now
     if contains_any(t, HOT_TAKE_SIGNALS):
         return "F7"
 
     # Also catch behaviour/incident stories here
     if has_behaviour:
         return "F7"
-
-    # ── F6: Star Spotlight — strict ──────────────────────────────────────────
-    # Only genuine performance/personal/records stories about a player.
-    # If player is merely quoted giving an opinion → already caught by F7 above.
-    has_spotlight   = contains_any(t, STAR_SPOTLIGHT_SIGNALS)
-    has_disqualifier = contains_any(t, F6_DISQUALIFIERS)
-
-    if has_spotlight and not has_disqualifier:
-        return "F6"
 
     # ── Default: F7 (not F6) ─────────────────────────────────────────────────
     # If we can't classify it cleanly, it's more likely analysis/opinion

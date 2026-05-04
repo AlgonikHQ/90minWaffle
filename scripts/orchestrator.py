@@ -285,7 +285,9 @@ def step_discord():
     log.info("━━━ STEP 7: Discord Posting ━━━")
     try:
         dp = import_module("discord_poster", "/root/90minwaffle/scripts/discord_poster.py")
-        posted = dp.process_discord_queue(limit=3)
+        # Raised from 3 to 8 — Discord has 13 specialist channels so content
+        # spreads naturally without flooding. Clears backlog faster.
+        posted = dp.process_discord_queue(limit=8)
         # Post poll after every F7 hot take
         conn = get_db(); c = conn.cursor()
         c.execute("""SELECT id, title, winning_hook, format FROM stories
@@ -383,6 +385,13 @@ async def run_cycle(script_limit=2, video_limit=2, force_digest=False, force_pod
         pt.update_views()
     except Exception as e:
         log.warning(f"  Performance tracking failed (non-critical): {e}")
+
+    # StatiqFC bridge — post edge receipts to 90minWaffle bets channel
+    try:
+        sb = import_module("statiq_bridge", "/root/90minwaffle/scripts/statiq_bridge.py")
+        sb.post_edge_receipts_to_waffle()
+    except Exception as e:
+        log.warning(f"  StatiqFC bridge failed (non-critical): {e}")
 
     # Daily digest — standings + top scorers at 8am
     if datetime.now(timezone.utc).hour == 8 or force_digest:

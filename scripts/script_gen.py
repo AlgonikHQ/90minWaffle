@@ -179,12 +179,34 @@ def build_prompt(story: dict, fmt: str) -> str:
     detected_team = _detect_team(story["title"])
     verified_stats = build_verified_stats_block(team_name=detected_team, comp=stat_comp)
 
+    # StatiqFC bridge — enrich F3 previews with edge context if available
+    edge_context = ""
+    if fmt == "F3":
+        try:
+            import sys as _sys
+            _sys.path.insert(0, "/root/90minwaffle/scripts")
+            from statiq_bridge import find_edge_for_fixture, build_edge_context_block
+            # Extract teams from title
+            import re as _re
+            vs_match = _re.search(r"(.+?)\s+v[s]?\s+(.+?)(?:\s*[-–:]|$)", story["title"], _re.IGNORECASE)
+            if vs_match:
+                _home = vs_match.group(1).strip()
+                _away = vs_match.group(2).strip()
+                _edge = find_edge_for_fixture(_home, _away)
+                if _edge:
+                    edge_context = build_edge_context_block(_edge)
+                    log.info(f"  Edge context injected for {_home} vs {_away}")
+        except Exception as _be:
+            log.debug(f"  Bridge lookup failed (non-critical): {_be}")
+
+    edge_section = f"\nEDGE_CONTEXT (for F3 only — use to frame statistical angle):\n{edge_context}" if edge_context else ""
+
     return f"""Generate a 90minWaffle video script for this story:
 
 COMPETITION LOCK: {detected_comp} — speak ONLY in this competition's context. Never mix competitions.
 
 VERIFIED_STATS (use only these for any numbers/dates/records):
-{verified_stats}
+{verified_stats}{edge_section}
 
 HEADLINE: {story["title"]}
 SOURCE: {story.get("source", "Unknown")} (Tier {story.get("source_tier", 2)})

@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv("/root/90minwaffle/.env")
 
 DB_PATH  = "/root/90minwaffle/data/waffle.db"
-FONT     = "/root/Anton.ttf"
+FONT     = "/root/90minwaffle/assets/Anton-Regular.ttf"
 LOG_PATH = "/root/90minwaffle/logs/text_overlay.log"
 
 logging.basicConfig(
@@ -163,62 +163,26 @@ def build(groups, hook, cta, duration, fmt="F2", title=""):
     parts.append(f"drawbox=x=0:y=1550:w={W}:h=370:color=black@0.60:t=fill")
     parts.append(f"drawbox=x=0:y=820:w={W}:h=180:color=black@0.38:t=fill")
 
-    # ── TOP BAR ──────────────────────────────────────────────────────────────
-    parts.append(f"drawbox=x=0:y=0:w={W}:h=90:color=black@0.90:t=fill")
-    parts.append(f"drawbox=x=0:y=87:w={W}:h=3:color={RED}:t=fill")
-
-    # Brand name — bigger, yellow dot accent
-    parts.append(
-        f"drawbox=x=16:y=22:w=8:h=8:color={YELLOW}:t=fill"
-    )
+    # ── TOP BAR — brand + format badge ──────────────────────────────────────
+    parts.append(f"drawbox=x=0:y=0:w=1080:h=90:color=black@0.90:t=fill")
+    parts.append(f"drawbox=x=0:y=87:w=1080:h=3:color={RED}:t=fill")
+    parts.append(f"drawbox=x=16:y=22:w=8:h=8:color={YELLOW}:t=fill")
     parts.append(
         f"drawtext={f}text=90minWaffle:fontsize=44:fontcolor={WHITE}:"
         f"x=32:y=18:shadowcolor=black:shadowx=3:shadowy=3"
     )
-
-    # League label (top left, below brand)
     parts.append(
         f"drawtext={f}text={safe(league, 22)}:fontsize=22:fontcolor={YELLOW}:"
         f"x=32:y=66:shadowcolor=black:shadowx=1:shadowy=1"
     )
-
-    # Format badge (top right) — bolder pill
     badge = safe(fmt_label, 18)
-    parts.append(
-        f"drawbox=x=680:y=8:w=388:h=38:color={RED}@0.95:t=fill"
-    )
+    parts.append(f"drawbox=x=680:y=8:w=388:h=38:color={RED}@0.95:t=fill")
     parts.append(
         f"drawtext={f}text={badge}:fontsize=24:fontcolor={WHITE}:"
         f"x=874-text_w/2:y=15:shadowcolor=black:shadowx=2:shadowy=2"
     )
 
-    # ── HOOK TITLE (0 → hook_end) ────────────────────────────────────────────
-    hw    = safe(hook, 40).split()
-    line1 = " ".join(hw[:3])
-    line2 = " ".join(hw[3:6]) if len(hw) > 3 else ""
-
-    if line1:
-        parts.append(
-            f"drawtext={f}text={line1}:fontsize=86:fontcolor={YELLOW}:"
-            f"x=(1080-text_w)/2:y=800:"
-            f"bordercolor=black:borderw=4:"
-            f"shadowcolor=black:shadowx=6:shadowy=6:"
-            f"enable={bt(0, hook_end)}"
-        )
-    if line2:
-        parts.append(
-            f"drawtext={f}text={line2}:fontsize=86:fontcolor={YELLOW}:"
-            f"x=(1080-text_w)/2:y=900:"
-            f"bordercolor=black:borderw=4:"
-            f"shadowcolor=black:shadowx=6:shadowy=6:"
-            f"enable={bt(0, hook_end)}"
-        )
-
-    # Red underline under hook
-    parts.append(
-        f"drawbox=x=80:y=980:w=920:h=4:color={RED}:t=fill:"
-        f"enable={bt(0, hook_end)}"
-    )
+    # Hook title removed — top bar handles branding, captions handle content
 
     # ── WORD-SYNC CAPTIONS ───────────────────────────────────────────────────
     for g in groups:
@@ -230,18 +194,18 @@ def build(groups, hook, cta, duration, fmt="F2", title=""):
 
         # Caption pill background
         parts.append(
-            f"drawbox=x=80:y=870:w=920:h=95:color=black@0.72:t=fill:"
+            f"drawbox=x=0:y=930:w=1080:h=130:color=black@0.75:t=fill:"
             f"enable={bt(t0, t1)}"
         )
         # Left red accent bar
         parts.append(
-            f"drawbox=x=80:y=870:w=6:h=95:color={RED}:t=fill:"
+            f"drawbox=x=0:y=930:w=6:h=130:color={RED}:t=fill:"
             f"enable={bt(t0, t1)}"
         )
         # Caption text — white with black border for max contrast
         parts.append(
             f"drawtext={f}text={txt}:fontsize=92:fontcolor={WHITE}:"
-            f"x=(1080-text_w)/2:y=884:"
+            f"x=(1080-text_w)/2:y=950:"
             f"bordercolor=black:borderw=3:"
             f"shadowcolor=black:shadowx=4:shadowy=4:"
             f"enable={bt(t0, t1)}"
@@ -249,8 +213,8 @@ def build(groups, hook, cta, duration, fmt="F2", title=""):
 
     # ── PERSISTENT WATERMARK ─────────────────────────────────────────────────
     parts.append(
-        f"drawtext={f}text=90minWaffle:fontsize=22:fontcolor={WHITE}@0.30:"
-        f"x={W}-text_w-18:y=950:"
+        f"drawtext={f}text=90minWaffle:fontsize=22:fontcolor=white@0.65:"
+        f"x=1080-text_w-18:y=1280:"
         f"shadowcolor=black:shadowx=1:shadowy=1"
     )
 
